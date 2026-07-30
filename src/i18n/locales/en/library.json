@@ -1,0 +1,24 @@
+{
+  "title": "Library",
+  "add_folder": "Add Folder",
+  "remove_folder": "Remove Folder",
+  "scan": "Scan",
+  "rescan": "Rescan",
+  "scanning_progress": "Scanning: {{current}} / {{total}}",
+  "scan_complete": "Scan complete: {{count}} files found",
+  "no_folders": "No folders added yet",
+  "no_files": "No files in this folder",
+  "columns": {
+    "filename": "Filename",
+    "title": "Title",
+    "artist": "Artist",
+    "album": "Album",
+    "duration": "Duration",
+    "format": "Format",
+    "size": "Size"
+  },
+  "stats": {
+    "total_files": "{{count}} files",
+    "total_size": "{{size}}"
+  }
+}

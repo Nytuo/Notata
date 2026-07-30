@@ -1,0 +1,31 @@
+{
+  "app": {
+    "name": "Notata",
+    "version": "0.1.0"
+  },
+  "actions": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "add": "Ajouter",
+    "remove": "Retirer",
+    "close": "Fermer",
+    "apply": "Appliquer",
+    "revert": "Rétablir",
+    "search": "Rechercher",
+    "refresh": "Actualiser",
+    "select_all": "Tout sélectionner",
+    "deselect_all": "Tout désélectionner",
+    "confirm": "Confirmer"
+  },
+  "status": {
+    "loading": "Chargement…",
+    "saving": "Enregistrement…",
+    "scanning": "Analyse…",
+    "searching": "Recherche…",
+    "ready": "Prêt",
+    "error": "Erreur",
+    "no_results": "Aucun résultat"
+  }
+}

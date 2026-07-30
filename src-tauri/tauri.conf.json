@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Notata",
+  "version": "0.1.0",
+  "identifier": "com.notata.app",
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Notata",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' https://musicbrainz.org https://coverartarchive.org https://fanart.tv https://*.fanart.tv; img-src 'self' data: blob: https://coverartarchive.org https://*.fanart.tv https://image.tmdb.org https://artworks.thetvdb.com; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_YOUR_MINISIGN_PUBLIC_KEY",
+      "endpoints": [
+        "https://github.com/Nytuo/Notata/releases/latest/download/latest.json"
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+pub mod book;
+pub mod batch;
+pub mod coverart;
+pub mod dedup;
+pub mod library;
+pub mod metadata;
+pub mod renamer;
+pub mod search;
+pub mod settings;
+pub mod updater;
+pub mod video;

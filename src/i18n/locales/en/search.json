@@ -1,0 +1,24 @@
+{
+  "title": "Search",
+  "placeholder": "Search releases, recordings, artists...",
+  "artist_filter": "Artist",
+  "search_button": "Search",
+  "provider": "Provider",
+  "results": {
+    "title": "Results",
+    "release": "Release",
+    "recording": "Recording",
+    "artist": "Artist",
+    "score": "Score",
+    "year": "Year",
+    "no_results": "No results found",
+    "apply_all": "Apply All",
+    "apply_selected": "Apply Selected"
+  },
+  "match": {
+    "title": "Match Preview",
+    "current": "Current",
+    "matched": "Matched",
+    "diff": "Differences"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "title": "Bibliothèque",
+  "add_folder": "Ajouter un dossier",
+  "remove_folder": "Retirer le dossier",
+  "scan": "Analyser",
+  "rescan": "Réanalyser",
+  "scanning_progress": "Analyse : {{current}} / {{total}}",
+  "scan_complete": "Analyse terminée : {{count}} fichiers trouvés",
+  "no_folders": "Aucun dossier ajouté",
+  "no_files": "Aucun fichier dans ce dossier",
+  "columns": {
+    "filename": "Nom du fichier",
+    "title": "Titre",
+    "artist": "Artiste",
+    "album": "Album",
+    "duration": "Durée",
+    "format": "Format",
+    "size": "Taille"
+  },
+  "stats": {
+    "total_files": "{{count}} fichiers",
+    "total_size": "{{size}}"
+  }
+}

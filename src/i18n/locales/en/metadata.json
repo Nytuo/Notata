@@ -1,0 +1,48 @@
+{
+  "title": "Metadata",
+  "fields": {
+    "title": "Title",
+    "artist": "Artist",
+    "album_artist": "Album Artist",
+    "album": "Album",
+    "track_number": "Track",
+    "total_tracks": "Total Tracks",
+    "disc_number": "Disc",
+    "total_discs": "Total Discs",
+    "year": "Year",
+    "date": "Date",
+    "genre": "Genre",
+    "composer": "Composer",
+    "comment": "Comment",
+    "lyrics": "Lyrics",
+    "isrc": "ISRC",
+    "musicbrainz_track_id": "MusicBrainz Track ID",
+    "musicbrainz_release_id": "MusicBrainz Release ID",
+    "musicbrainz_artist_id": "MusicBrainz Artist ID"
+  },
+  "properties": {
+    "title": "Properties",
+    "duration": "Duration",
+    "bitrate": "Bitrate",
+    "sample_rate": "Sample Rate",
+    "channels": "Channels",
+    "format": "Format",
+    "file_size": "File Size",
+    "path": "Path"
+  },
+  "cover_art": {
+    "title": "Cover Art",
+    "no_art": "No cover art",
+    "embedded": "Embedded",
+    "types": {
+      "front": "Front",
+      "back": "Back",
+      "disc": "Disc",
+      "booklet": "Booklet",
+      "artist": "Artist"
+    }
+  },
+  "unsaved_changes": "You have unsaved changes",
+  "save_success": "Metadata saved successfully",
+  "save_error": "Failed to save metadata"
+}

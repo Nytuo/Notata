@@ -1,0 +1,48 @@
+{
+  "title": "Métadonnées",
+  "fields": {
+    "title": "Titre",
+    "artist": "Artiste",
+    "album_artist": "Artiste de l'album",
+    "album": "Album",
+    "track_number": "Piste",
+    "total_tracks": "Nombre de pistes",
+    "disc_number": "Disque",
+    "total_discs": "Nombre de disques",
+    "year": "Année",
+    "date": "Date",
+    "genre": "Genre",
+    "composer": "Compositeur",
+    "comment": "Commentaire",
+    "lyrics": "Paroles",
+    "isrc": "ISRC",
+    "musicbrainz_track_id": "Identifiant piste MusicBrainz",
+    "musicbrainz_release_id": "Identifiant album MusicBrainz",
+    "musicbrainz_artist_id": "Identifiant artiste MusicBrainz"
+  },
+  "properties": {
+    "title": "Propriétés",
+    "duration": "Durée",
+    "bitrate": "Débit",
+    "sample_rate": "Échantillonnage",
+    "channels": "Canaux",
+    "format": "Format",
+    "file_size": "Taille du fichier",
+    "path": "Chemin"
+  },
+  "cover_art": {
+    "title": "Pochette",
+    "no_art": "Aucune pochette",
+    "embedded": "Intégrée",
+    "types": {
+      "front": "Recto",
+      "back": "Verso",
+      "disc": "Disque",
+      "booklet": "Livret",
+      "artist": "Artiste"
+    }
+  },
+  "unsaved_changes": "Vous avez des modifications non enregistrées",
+  "save_success": "Métadonnées enregistrées",
+  "save_error": "Échec de l'enregistrement des métadonnées"
+}

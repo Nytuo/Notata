@@ -1,0 +1,24 @@
+{
+  "title": "Recherche",
+  "placeholder": "Rechercher albums, enregistrements, artistes…",
+  "artist_filter": "Artiste",
+  "search_button": "Rechercher",
+  "provider": "Fournisseur",
+  "results": {
+    "title": "Résultats",
+    "release": "Album",
+    "recording": "Enregistrement",
+    "artist": "Artiste",
+    "score": "Score",
+    "year": "Année",
+    "no_results": "Aucun résultat",
+    "apply_all": "Tout appliquer",
+    "apply_selected": "Appliquer la sélection"
+  },
+  "match": {
+    "title": "Aperçu de la correspondance",
+    "current": "Actuel",
+    "matched": "Proposé",
+    "diff": "Différences"
+  }
+}
