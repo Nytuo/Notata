@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>fr.nytuo.notata</id>
+  <name>Notata</name>
+  <summary>Tag your media once, and let every server read it</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer_name>BEUX Arnaud (Nytuo)</developer_name>
+  <description>
+    <p>
+      Notata reads and writes metadata for music, movies, series, comics, and
+      books, using the formats media servers already understand: embedded
+      audio tags, Kodi-style NFO sidecars, and the XML inside CBZ and EPUB
+      archives.
+    </p>
+    <p>
+      Includes MusicBrainz and cover art lookup for music, TMDB/TheTVDB
+      lookup for movies and series, batch editing, template-based renaming,
+      and duplicate detection.
+    </p>
+  </description>
+  <launchable type="desktop-id">fr.nytuo.notata.desktop</launchable>
+  <url type="homepage">https://github.com/Nytuo/Notata</url>
+  <url type="bugtracker">https://github.com/Nytuo/Notata/issues</url>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.1.0" date="2026-07-31">
+      <description>
+        <p>Initial release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

@@ -1,0 +1,53 @@
+# Flatpak manifest for Notata.
+#
+# The Rust build runs inside the sandbox rather than repackaging a prebuilt
+# AppImage: bun and the crates.io registry both need network access during
+# the build, which flatpak-builder grants per-module via build-args, and
+# Tauri's asset embedding happens in build.rs at compile time — a plain
+# `cargo build` after `bun run build` is enough, no bundler CLI needed here.
+app-id: fr.nytuo.notata
+runtime: org.freedesktop.Platform
+runtime-version: '23.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: notata
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=dri
+  # Broad on purpose: the app is a general-purpose tagger the user points at
+  # arbitrary library folders via a native file picker, not a fixed content
+  # source like ~/Music.
+  - --filesystem=host
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  build-args:
+    - --share=network
+modules:
+  - name: notata
+    buildsystem: simple
+    build-commands:
+      - curl -fsSL https://bun.sh/install | bash
+      - export PATH="$HOME/.bun/bin:$PATH" && bun install --cwd notata-src --frozen-lockfile
+      - export PATH="$HOME/.bun/bin:$PATH" && bun run --cwd notata-src build
+      - cargo build --release --manifest-path notata-src/src-tauri/Cargo.toml
+      - install -Dm755 notata-src/src-tauri/target/release/notata /app/bin/notata
+      - install -Dm644 notata-src/src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/fr.nytuo.notata.png
+      - install -Dm644 fr.nytuo.notata.desktop /app/share/applications/fr.nytuo.notata.desktop
+      - install -Dm644 fr.nytuo.notata.metainfo.xml /app/share/metainfo/fr.nytuo.notata.metainfo.xml
+    sources:
+      - type: dir
+        path: ..
+        dest: notata-src
+        skip:
+          - node_modules
+          - dist
+          - src-tauri/target
+          - .git
+      - type: file
+        path: fr.nytuo.notata.desktop
+      - type: file
+        path: fr.nytuo.notata.metainfo.xml
