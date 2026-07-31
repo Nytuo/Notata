@@ -1,0 +1,197 @@
+name: 'publish'
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform to build for (choose a single target or "all")'
+        required: false
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - linux-x64
+          - linux-arm64
+          - macos-aarch64
+          - windows-x64
+          - windows-aarch64
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        shell: bash
+        run: |
+          ALL='[
+            {"id":"linux-x64","runs_on":"ubuntu-24.04"},
+            {"id":"linux-arm64","runs_on":"ubuntu-24.04-arm"},
+            {"id":"macos-aarch64","runs_on":"macos-latest","target":"aarch64-apple-darwin","bundles":"dmg"},
+            {"id":"windows-x64","runs_on":"windows-2022","bundles":"nsis"},
+            {"id":"windows-aarch64","runs_on":"windows-2022","target":"aarch64-pc-windows-msvc","bundles":"nsis"}
+          ]'
+          PLATFORM="${{ github.event.inputs.platform }}"
+          if [[ -z "$PLATFORM" || "$PLATFORM" == "all" ]]; then
+            INCLUDE="$ALL"
+          else
+            INCLUDE=$(echo "$ALL" | jq "[.[] | select(.id == \"$PLATFORM\")]")
+          fi
+          echo "matrix=$(echo "$INCLUDE" | jq -c '{include: .}')" >> "$GITHUB_OUTPUT"
+
+  publish-tauri:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+
+    runs-on: ${{ matrix.runs_on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: read app version
+        id: version
+        shell: bash
+        run: echo "value=$(jq -r .version src-tauri/tauri.conf.json)" >> "$GITHUB_OUTPUT"
+
+      # Package list per Tauri's documented Linux prerequisites, plus zip for
+      # the portable archive step below.
+      - name: install Linux dependencies
+        if: startsWith(matrix.runs_on, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            xdg-utils \
+            file \
+            zip
+
+      - name: setup bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: build frontend
+        run: bun run build
+
+      # Built as plain shell rather than nested GH-expression ternaries, so an
+      # unset matrix.target/bundles cleanly yields no flag instead of a
+      # stray empty argument reaching `tauri build`.
+      - name: compute build args
+        id: build_args
+        shell: bash
+        run: |
+          ARGS=""
+          if [[ -n "${{ matrix.target || '' }}" ]]; then
+            ARGS="$ARGS --target ${{ matrix.target || '' }}"
+          fi
+          if [[ -n "${{ matrix.bundles || '' }}" ]]; then
+            ARGS="$ARGS --bundles ${{ matrix.bundles || '' }}"
+          fi
+          echo "value=$ARGS" >> "$GITHUB_OUTPUT"
+
+      - name: build and publish
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: notata-v__VERSION__
+          releaseName: 'Notata v__VERSION__'
+          releaseBody: 'See the assets below to download this release.'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ steps.build_args.outputs.value }}
+
+      # ---- extra Linux artifact: a portable zip of the raw binary ----------
+      - name: package portable zip (Linux)
+        if: startsWith(matrix.runs_on, 'ubuntu')
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN_DIR="src-tauri/target/${{ matrix.target && format('{0}/', matrix.target) || '' }}release"
+          ARCH="${{ matrix.id == 'linux-arm64' && 'arm64' || 'x64' }}"
+          STAGE="notata-linux-$ARCH"
+          mkdir -p "$STAGE"
+          cp "$BIN_DIR/notata" "$STAGE/"
+          cp -r src-tauri/icons "$STAGE/icons"
+          ZIP_NAME="Notata-${{ steps.version.outputs.value }}-linux-$ARCH.zip"
+          zip -r "$ZIP_NAME" "$STAGE"
+          gh release upload "notata-v${{ steps.version.outputs.value }}" "$ZIP_NAME" --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ---- extra macOS artifact: an unsigned .pkg installer -----------------
+      # Codesigning/notarization needs an Apple Developer certificate, which
+      # isn't configured here — this .pkg, like the .dmg tauri-action builds,
+      # will trigger an unsigned-app Gatekeeper warning until one is added.
+      - name: debug macOS build output
+        if: startsWith(matrix.runs_on, 'macos')
+        shell: bash
+        run: find src-tauri/target -type d -name "bundle" 2>/dev/null | head -5
+
+      - name: package pkg installer (macOS)
+        if: startsWith(matrix.runs_on, 'macos')
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="src-tauri/target/${{ matrix.target }}/release/bundle/macos/Notata.app"
+          PKG_NAME="Notata-${{ steps.version.outputs.value }}-macos-aarch64.pkg"
+          pkgbuild --install-location /Applications --component "$APP_PATH" "$PKG_NAME"
+          gh release upload "notata-v${{ steps.version.outputs.value }}" "$PKG_NAME" --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  flatpak:
+    needs: publish-tauri
+    # The flatpak build doesn't depend on any other leg's output — only on a
+    # release existing to attach to — so one failed matrix entry (fail-fast
+    # is off) shouldn't block it. `always()` still requires `needs` to have
+    # run, just not to have all succeeded.
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: read app version
+        id: version
+        run: echo "value=$(jq -r .version src-tauri/tauri.conf.json)" >> "$GITHUB_OUTPUT"
+
+      # Builds Rust and the frontend inside the sandbox (see the manifest for
+      # why) rather than repackaging an artifact from the job above, so this
+      # runs independently and only needs `needs:` for release-creation order.
+      - name: build flatpak bundle
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: notata.flatpak
+          manifest-path: flatpak/fr.nytuo.notata.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+
+      - name: upload flatpak to release
+        shell: bash
+        run: |
+          set -euo pipefail
+          FINAL_NAME="Notata-${{ steps.version.outputs.value }}-linux-x86_64.flatpak"
+          mv notata.flatpak "$FINAL_NAME"
+          gh release upload "notata-v${{ steps.version.outputs.value }}" "$FINAL_NAME" --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
