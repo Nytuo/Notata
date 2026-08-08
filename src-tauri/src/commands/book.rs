@@ -32,6 +32,21 @@ pub fn write_book_metadata(
     Ok(entry)
 }
 
+/// Replace the book's cover with a manually chosen picture. Returns the
+/// archive entry that was written.
+#[tauri::command]
+pub fn write_book_cover(
+    state: State<'_, AppState>,
+    path: String,
+    image_data: Vec<u8>,
+    mime_type: String,
+) -> Result<String, String> {
+    let entry = book_meta::write_book_cover(&path, &image_data, &mime_type)
+        .map_err(|e| e.to_string())?;
+    stamp_modified(&state, &path);
+    Ok(entry)
+}
+
 #[tauri::command]
 pub fn write_book_metadata_batch(
     state: State<'_, AppState>,

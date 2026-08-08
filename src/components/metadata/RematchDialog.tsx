@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Search, Loader2, Check, ArrowRight, ChevronRight } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -72,6 +73,8 @@ export function RematchDialog({ open, onOpenChange }: RematchDialogProps) {
         artistFilter || undefined,
       );
       setResults(res);
+    } catch (e) {
+      toast.error(`Search failed: ${e}`);
     } finally {
       setIsSearching(false);
     }
@@ -92,6 +95,8 @@ export function RematchDialog({ open, onOpenChange }: RematchDialogProps) {
       if (matched) {
         setSelectedTrack(matched);
       }
+    } catch (e) {
+      toast.error(`Could not load release details: ${e}`);
     } finally {
       setIsLoadingDetails(false);
     }
@@ -127,6 +132,7 @@ export function RematchDialog({ open, onOpenChange }: RematchDialogProps) {
       customTags: currentMetadata.customTags,
     };
     applyFromProvider(merged);
+    toast.success("Metadata applied — remember to save");
     handleOpenChange(false);
   };
 

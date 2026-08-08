@@ -204,26 +204,28 @@ fn is_image_entry(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Extract a cover image — the first page of a comic, or the EPUB's declared
-/// cover with a first-image fallback.
-pub fn read_book_cover(path: &str) -> Result<Option<BookCover>> {
+/// Locate the entry a cover image lives at — the one whose name mentions
+/// "cover", falling back to the first page in archive order.
+fn find_cover_entry_name(path: &str) -> Result<Option<String>> {
     if !archive::is_supported_archive(path) {
         return Ok(None);
     }
 
     let entries = archive::list_entries(path)?;
-
     let mut images: Vec<&String> = entries.iter().filter(|n| is_image_entry(n)).collect();
     images.sort();
 
-    // Prefer an entry that names itself a cover, else the first page.
-    let chosen = images
+    Ok(images
         .iter()
         .find(|n| n.to_lowercase().contains("cover"))
         .or_else(|| images.first())
-        .map(|n| (*n).clone());
+        .map(|n| (*n).clone()))
+}
 
-    let Some(entry_name) = chosen else {
+/// Extract a cover image — the first page of a comic, or the EPUB's declared
+/// cover with a first-image fallback.
+pub fn read_book_cover(path: &str) -> Result<Option<BookCover>> {
+    let Some(entry_name) = find_cover_entry_name(path)? else {
         return Ok(None);
     };
 
@@ -286,6 +288,50 @@ pub fn write_book_metadata(path: &str, meta: &BookMetadata) -> Result<String> {
             Ok(opf_path)
         }
     }
+}
+
+fn ext_for_mime(mime_type: &str) -> &'static str {
+    match mime_type {
+        "image/png" => "png",
+        "image/webp" => "webp",
+        "image/gif" => "gif",
+        _ => "jpg",
+    }
+}
+
+/// Replace the book's cover image with a manually chosen picture.
+///
+/// Overwrites the existing cover entry in place if there is one (comics
+/// pick their cover by content, not by the manifest, so a mismatched
+/// extension is harmless). If the archive has no image at all yet, a new
+/// entry is added — but only for comics, since an EPUB's cover must be
+/// declared in its manifest, which this does not rewrite.
+pub fn write_book_cover(path: &str, image_data: &[u8], mime_type: &str) -> Result<String> {
+    if !archive::is_supported_archive(path) {
+        return Err(NotataError::Custom(format!(
+            "{} archives cannot be written by Notata — convert to CBZ first",
+            Path::new(path)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("These")
+                .to_uppercase()
+        )));
+    }
+
+    let entry_name = match find_cover_entry_name(path)? {
+        Some(name) => name,
+        None if kind_for(path) == BookKind::Comic => {
+            format!("000-cover.{}", ext_for_mime(mime_type))
+        }
+        None => {
+            return Err(NotataError::Custom(
+                "This EPUB has no existing cover image to replace".to_string(),
+            ))
+        }
+    };
+
+    archive::replace_entry(path, &entry_name, image_data)?;
+    Ok(entry_name)
 }
 
 #[cfg(test)]

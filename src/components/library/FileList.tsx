@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import { Music, Pencil, Sparkles } from "lucide-react";
 import {
@@ -87,15 +88,19 @@ function StatusBadge({ file }: { file: MediaFile }) {
   );
 }
 
+const ROW_HEIGHT_ESTIMATE = 33;
+
 export function FileList() {
   const { t } = useTranslation("library");
-  const {
-    files,
-    selectedFileIds,
-    selectFiles,
-    statusFilter,
-    searchFilter,
-  } = useLibraryStore();
+  // Selected individually (not destructured off one `useLibraryStore()`
+  // call) so this component only re-renders for the slices it actually
+  // reads — unrelated store writes (scan progress ticks, etc.) used to
+  // force a full re-render of every row in a 4000+ file library.
+  const files = useLibraryStore((s) => s.files);
+  const selectedFileIds = useLibraryStore((s) => s.selectedFileIds);
+  const selectFiles = useLibraryStore((s) => s.selectFiles);
+  const statusFilter = useLibraryStore((s) => s.statusFilter);
+  const searchFilter = useLibraryStore((s) => s.searchFilter);
   const { loadMetadata, currentPath } = useMetadataStore();
   const loadVideoMetadata = useVideoMetadataStore((s) => s.loadMetadata);
   const videoPath = useVideoMetadataStore((s) => s.currentPath);
@@ -121,6 +126,26 @@ export function FileList() {
     // `modifiedPaths` is read indirectly through `statusOf`; listing it here
     // keeps the memo in step as files are edited.
   }, [files, statusFilter, searchFilter, statusOf, modifiedPaths]);
+
+  // A Set for O(1) row-highlight lookups — `selectedFileIds` stays an
+  // array (order matters for shift-click range anchoring), but checking
+  // membership with `.includes()` once per row made a full render of a
+  // large, mostly-selected library effectively O(n^2).
+  const selectedSet = useMemo(() => new Set(selectedFileIds), [selectedFileIds]);
+
+  const parentRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: visibleFiles.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_HEIGHT_ESTIMATE,
+    overscan: 12,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0;
+  const paddingBottom =
+    virtualRows.length > 0
+      ? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end
+      : 0;
 
   const handleRowClick = (file: MediaFile, e: React.MouseEvent) => {
     if (e.shiftKey && selectedFileIds.length > 0) {
@@ -170,7 +195,7 @@ export function FileList() {
           <p className="text-sm">No files match the current filter</p>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto">
+        <div ref={parentRef} className="flex-1 overflow-y-auto">
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
@@ -196,38 +221,57 @@ export function FileList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visibleFiles.map((file) => (
-                <TableRow
-                  key={file.id}
-                  className={`cursor-pointer ${
-                    selectedFileIds.includes(file.id) ? "bg-accent" : ""
-                  } ${activePath === file.path ? "bg-accent/70" : ""}`}
-                  onClick={(e) => handleRowClick(file, e)}
-                  title={file.fileName}
-                >
-                  <TableCell className="max-w-0 truncate font-mono text-xs">
-                    {file.fileName}
-                  </TableCell>
-                  <TableCell className="hidden max-w-0 truncate text-xs @2xl:table-cell">
-                    —
-                  </TableCell>
-                  <TableCell className="hidden max-w-0 truncate text-xs @3xl:table-cell">
-                    —
-                  </TableCell>
-                  <TableCell className="hidden text-right text-xs tabular-nums @lg:table-cell">
-                    {formatDuration(file.durationMs)}
-                  </TableCell>
-                  <TableCell className="hidden text-xs @xl:table-cell">
-                    {formatAudioFormat(file.audioFormat)}
-                  </TableCell>
-                  <TableCell className="hidden text-right text-xs tabular-nums @md:table-cell">
-                    {formatSize(file.fileSize)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <StatusBadge file={file} />
-                  </TableCell>
-                </TableRow>
-              ))}
+              {/* Only the rows in the viewport (plus overscan) are ever
+                  mounted; these two spacer rows stand in for the rest so
+                  scrollbar size/position stay correct without rendering
+                  thousands of off-screen `<tr>`s. */}
+              {paddingTop > 0 && (
+                <tr style={{ height: paddingTop }}>
+                  <td colSpan={7} />
+                </tr>
+              )}
+              {virtualRows.map((virtualRow) => {
+                const file = visibleFiles[virtualRow.index];
+                return (
+                  <TableRow
+                    key={file.id}
+                    ref={rowVirtualizer.measureElement}
+                    data-index={virtualRow.index}
+                    className={`cursor-pointer ${
+                      selectedSet.has(file.id) ? "bg-accent" : ""
+                    } ${activePath === file.path ? "bg-accent/70" : ""}`}
+                    onClick={(e) => handleRowClick(file, e)}
+                    title={file.fileName}
+                  >
+                    <TableCell className="max-w-0 truncate font-mono text-xs">
+                      {file.fileName}
+                    </TableCell>
+                    <TableCell className="hidden max-w-0 truncate text-xs @2xl:table-cell">
+                      —
+                    </TableCell>
+                    <TableCell className="hidden max-w-0 truncate text-xs @3xl:table-cell">
+                      —
+                    </TableCell>
+                    <TableCell className="hidden text-right text-xs tabular-nums @lg:table-cell">
+                      {formatDuration(file.durationMs)}
+                    </TableCell>
+                    <TableCell className="hidden text-xs @xl:table-cell">
+                      {formatAudioFormat(file.audioFormat)}
+                    </TableCell>
+                    <TableCell className="hidden text-right text-xs tabular-nums @md:table-cell">
+                      {formatSize(file.fileSize)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <StatusBadge file={file} />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {paddingBottom > 0 && (
+                <tr style={{ height: paddingBottom }}>
+                  <td colSpan={7} />
+                </tr>
+              )}
             </TableBody>
           </Table>
         </div>

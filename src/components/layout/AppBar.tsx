@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Copy, Settings, Disc3, FolderPlus, Loader2 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -36,7 +37,13 @@ export function AppBar() {
   const handleConfirmKind = async (kind: MediaKind) => {
     const path = pendingPath;
     setPendingPath(null);
-    if (path) await addFolder(path, kind);
+    if (!path) return;
+    try {
+      await addFolder(path, kind);
+      toast.success(`Added library at ${path}`);
+    } catch (e) {
+      toast.error(`Could not add library: ${e}`);
+    }
   };
 
   return (

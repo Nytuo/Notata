@@ -14,8 +14,12 @@ import {
   Info,
   Heart,
   ArrowDownCircle,
+  AudioWaveform,
+  FolderOpen,
+  TriangleAlert,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   Dialog,
   DialogContent,
@@ -43,7 +47,7 @@ import {
 import { requestUpdateCheck } from "@/components/common/UpdaterModal";
 import { commands } from "@/lib/tauri";
 import { toast } from "sonner";
-import type { ApiKeyStatus } from "@/lib/types";
+import type { ApiKeyStatus, FfmpegStatus } from "@/lib/types";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -83,10 +87,13 @@ const LIBRARIES = [
   { name: "quick-xml", role: "NFO and OPF parsing", license: "MIT" },
   { name: "zip", role: "CBZ and EPUB archives", license: "MIT" },
   { name: "rusqlite", role: "Local library index", license: "MIT" },
+  { name: "FFmpeg", role: "Audio transcoding (external, not bundled)", license: "LGPL/GPL" },
   { name: "reqwest", role: "Provider HTTP calls", license: "MIT / Apache-2.0" },
   { name: "MusicBrainz", role: "Music metadata", license: "Community data" },
   { name: "TMDB / TheTVDB", role: "Video metadata", license: "API terms apply" },
 ];
+
+const PREF_FFMPEG_PATH = "ffmpeg_path";
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { i18n } = useTranslation();
@@ -94,6 +101,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [version, setVersion] = useState("");
+
+  const [ffmpegPath, setFfmpegPath] = useState("");
+  const [ffmpegStatus, setFfmpegStatus] = useState<FfmpegStatus | null>(null);
+  const [checkingFfmpeg, setCheckingFfmpeg] = useState(false);
+  const [savingFfmpeg, setSavingFfmpeg] = useState(false);
 
   const { mode, accent, language, setMode, setAccent, setLanguage } =
     useSettingsStore();
@@ -103,7 +115,42 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     commands.getApiKeyStatus().then(setStatus).catch(() => {});
     invoke<string>("get_app_version").then(setVersion).catch(() => {});
     setKeys({});
+
+    commands
+      .getPreference(PREF_FFMPEG_PATH)
+      .then((v) => setFfmpegPath(v ?? ""))
+      .catch(() => {});
+    checkFfmpeg();
   }, [open]);
+
+  const checkFfmpeg = async () => {
+    setCheckingFfmpeg(true);
+    try {
+      setFfmpegStatus(await commands.checkFfmpegAvailable());
+    } catch {
+      setFfmpegStatus({ available: false, version: null, path: "ffmpeg" });
+    } finally {
+      setCheckingFfmpeg(false);
+    }
+  };
+
+  const handlePickFfmpeg = async () => {
+    const selected = await openDialog({ directory: false, multiple: false });
+    if (typeof selected === "string") setFfmpegPath(selected);
+  };
+
+  const handleSaveFfmpegPath = async () => {
+    setSavingFfmpeg(true);
+    try {
+      await commands.setPreference(PREF_FFMPEG_PATH, ffmpegPath.trim());
+      await checkFfmpeg();
+      toast.success("ffmpeg path saved");
+    } catch (e) {
+      toast.error(`Could not save the ffmpeg path: ${e}`);
+    } finally {
+      setSavingFfmpeg(false);
+    }
+  };
 
   const handleSaveKey = async (provider: string) => {
     const value = keys[provider] ?? "";
@@ -149,6 +196,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             <TabsTrigger value="appearance" className="flex-1 gap-1.5 text-xs">
               <Palette className="h-3.5 w-3.5" />
               Appearance
+            </TabsTrigger>
+            <TabsTrigger value="transcoding" className="flex-1 gap-1.5 text-xs">
+              <AudioWaveform className="h-3.5 w-3.5" />
+              Transcoding
             </TabsTrigger>
             <TabsTrigger value="about" className="flex-1 gap-1.5 text-xs">
               <Info className="h-3.5 w-3.5" />
@@ -302,6 +353,73 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   Translations are a work in progress — untranslated strings fall
                   back to English.
                 </p>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="transcoding" className="mt-0 space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Converting audio between formats (MP3, AAC, Ogg Vorbis, Opus,
+                FLAC, ALAC, WAV, AIFF…) runs through ffmpeg, which isn't
+                bundled with Notata. Install it and it'll be found on your
+                PATH automatically, or point at a specific binary below.
+              </p>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">ffmpeg</span>
+                  {checkingFfmpeg && (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  )}
+                  {!checkingFfmpeg && ffmpegStatus?.available && (
+                    <Badge
+                      variant="outline"
+                      className="gap-1 border-emerald-500/40 bg-emerald-500/10 text-[10px] text-emerald-700 dark:text-emerald-400"
+                    >
+                      <Check className="h-3 w-3" />
+                      {ffmpegStatus.version ?? "Found"}
+                    </Badge>
+                  )}
+                  {!checkingFfmpeg && !ffmpegStatus?.available && (
+                    <Badge
+                      variant="outline"
+                      className="gap-1 border-destructive/40 bg-destructive/10 text-[10px] text-destructive"
+                    >
+                      <TriangleAlert className="h-3 w-3" />
+                      Not found
+                    </Badge>
+                  )}
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Leave blank to use "ffmpeg" from your PATH. ffprobe is
+                  expected next to whatever binary you point at here.
+                </p>
+
+                <div className="flex gap-2">
+                  <Input
+                    className="h-8 flex-1 text-xs"
+                    placeholder="/usr/local/bin/ffmpeg"
+                    value={ffmpegPath}
+                    onChange={(e) => setFfmpegPath(e.target.value)}
+                  />
+                  <Button size="sm" variant="outline" className="h-8" onClick={handlePickFfmpeg}>
+                    <FolderOpen className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-8"
+                    onClick={handleSaveFfmpegPath}
+                    disabled={savingFfmpeg}
+                  >
+                    {savingFfmpeg ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      "Save"
+                    )}
+                  </Button>
+                </div>
               </div>
             </TabsContent>
 

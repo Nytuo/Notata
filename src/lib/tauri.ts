@@ -30,7 +30,12 @@ import type {
   ResolveOutcome,
   ScanResult,
   SeriesMetadata,
+  FfmpegStatus,
   TrackMetadata,
+  TranscodeFormatInfo,
+  TranscodeOptions,
+  TranscodePreviewEntry,
+  TranscodeResult,
   VideoArtwork,
   VideoMetadata,
   VideoProperties,
@@ -195,6 +200,13 @@ export const commands = {
   writeBookMetadataBatch: (entries: [string, BookMetadata][]) =>
     invoke<[string, boolean, string][]>("write_book_metadata_batch", { entries }),
 
+  writeBookCover: (path: string, imageData: number[], mimeType: string) =>
+    invoke<string>("write_book_cover", { path, imageData, mimeType }),
+
+  // ------------------------------------------------------------------ fs ----
+
+  readFileBytes: (path: string) => invoke<ArrayBuffer>("read_file_bytes", { path }),
+
   // ----------------------------------------------------------- settings ----
 
   setApiKey: (provider: string, apiKey: string) =>
@@ -236,6 +248,9 @@ export const commands = {
   resolveDuplicates: (paths: string[]) =>
     invoke<ResolveOutcome[]>("resolve_duplicates", { paths }),
 
+  readAudioPreview: (path: string) =>
+    invoke<ArrayBuffer>("read_audio_preview", { path }),
+
   // -------------------------------------------------------------- batch ----
 
   previewBatchEdit: (paths: string[], edits: BatchEdit[]) =>
@@ -243,4 +258,17 @@ export const commands = {
 
   applyBatchEdit: (paths: string[], edits: BatchEdit[]) =>
     invoke<BatchResult[]>("apply_batch_edit", { paths, edits }),
+
+  // ----------------------------------------------------------- transcode ----
+
+  listTranscodeFormats: () =>
+    invoke<TranscodeFormatInfo[]>("list_transcode_formats"),
+
+  checkFfmpegAvailable: () => invoke<FfmpegStatus>("check_ffmpeg_available"),
+
+  previewTranscode: (paths: string[], options: TranscodeOptions) =>
+    invoke<TranscodePreviewEntry[]>("preview_transcode", { paths, options }),
+
+  transcodeFiles: (paths: string[], options: TranscodeOptions) =>
+    invoke<TranscodeResult[]>("transcode_files", { paths, options }),
 } as const;

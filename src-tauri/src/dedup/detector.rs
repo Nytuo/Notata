@@ -4,6 +4,8 @@ use std::path::Path;
 
 use sha2::{Digest, Sha256};
 
+use crate::dedup::cache::FingerprintCache;
+use crate::dedup::fingerprint;
 use crate::dedup::{DuplicateFile, DuplicateGroup, DuplicateMode, DuplicateReport, ResolveOutcome};
 use crate::error::Result;
 use crate::models::media_file::MediaFile;
@@ -40,7 +42,7 @@ pub fn normalize(value: &str) -> String {
 }
 
 /// SHA-256 of the whole file, streamed so large files do not land in memory.
-fn hash_file(path: &Path) -> std::io::Result<String> {
+pub(crate) fn hash_file(path: &Path) -> std::io::Result<String> {
     let mut file = std::fs::File::open(path)?;
     let mut hasher = Sha256::new();
     let mut buffer = vec![0u8; 64 * 1024];
@@ -198,7 +200,11 @@ pub fn find_fuzzy_duplicates(
             continue;
         }
 
-        // Within a title bucket, cluster by artist similarity.
+        // Within a title bucket, cluster by artist similarity. A bucket can
+        // split into several clusters, so each one needs its own index to
+        // keep group ids unique (they were colliding when two clusters in
+        // the same bucket happened to end up the same size).
+        let mut cluster_index = 0usize;
         let mut unassigned: Vec<&MediaFile> = candidates;
         while unassigned.len() > 1 {
             let reference = unassigned.remove(0);
@@ -244,11 +250,12 @@ pub fn find_fuzzy_duplicates(
                 .collect();
 
             groups.push(finish_group(
-                format!("fuzzy-{}-{}", key.replace(' ', "-"), cluster.len()),
+                format!("fuzzy-{}-{}", key.replace(' ', "-"), cluster_index),
                 DuplicateMode::Fuzzy,
                 format!("{} files tagged as \"{}\"", cluster.len(), key),
                 entries,
             ));
+            cluster_index += 1;
         }
     }
 
@@ -256,7 +263,153 @@ pub fn find_fuzzy_duplicates(
     groups
 }
 
-pub fn build_report(groups: Vec<DuplicateGroup>) -> DuplicateReport {
+/// Resolves a file's fingerprint, checking three layers in order: this
+/// run's in-memory cache (keyed by path, so a file touched twice in one
+/// scan is never rehashed), the on-disk cache (keyed by SHA-256 of the
+/// whole file, so an unchanged file skips the expensive decode+fingerprint
+/// step across runs), and finally a fresh decode.
+fn fingerprint_cached(
+    file: &MediaFile,
+    session_cache: &mut HashMap<String, Vec<u32>>,
+    disk_cache: &mut FingerprintCache,
+    warnings: &mut Vec<String>,
+) -> Option<Vec<u32>> {
+    if let Some(fp) = session_cache.get(&file.path) {
+        return Some(fp.clone());
+    }
+
+    let path = Path::new(&file.path);
+    let hash = match hash_file(path) {
+        Ok(h) => h,
+        Err(e) => {
+            let msg = format!("Could not hash {}: {}", file.path, e);
+            log::warn!("{}", msg);
+            warnings.push(msg);
+            return None;
+        }
+    };
+
+    if let Some(fp) = disk_cache.get(&hash) {
+        session_cache.insert(file.path.clone(), fp.clone());
+        return Some(fp.clone());
+    }
+
+    match fingerprint::fingerprint_file(path) {
+        Ok(fp) => {
+            disk_cache.insert(hash, fp.clone());
+            session_cache.insert(file.path.clone(), fp.clone());
+            Some(fp)
+        }
+        Err(e) => {
+            let msg = format!("Could not fingerprint {}: {}", file.path, e);
+            log::warn!("{}", msg);
+            warnings.push(msg);
+            None
+        }
+    }
+}
+
+/// Same recording by audio content, regardless of tags or encoding.
+///
+/// Files are bucketed by duration first (allowing a few seconds of slack for
+/// different trimming/padding between rips) so fingerprinting - the
+/// expensive step, since it decodes the file - only runs where a duplicate
+/// is actually plausible. Within a bucket, fingerprints are compared
+/// pairwise via Chromaprint-style matching.
+pub fn find_acoustic_duplicates(
+    files: &[MediaFile],
+    threshold: f64,
+    disk_cache: &mut FingerprintCache,
+    mut on_progress: impl FnMut(usize, usize),
+) -> (Vec<DuplicateGroup>, Vec<String>) {
+    const DURATION_TOLERANCE_MS: i64 = 5_000;
+
+    let mut warnings = Vec::new();
+
+    let mut candidates: Vec<&MediaFile> = Vec::new();
+    for file in files {
+        if file.duration_ms.is_some() {
+            candidates.push(file);
+        } else {
+            warnings.push(format!(
+                "Skipped {} — no duration indexed, rescan the library to fix this",
+                file.path
+            ));
+        }
+    }
+    candidates.sort_by_key(|f| f.duration_ms.unwrap_or(0));
+    let total = candidates.len();
+    on_progress(0, total);
+
+    // Fingerprints are only computed once per file, lazily, since decoding
+    // is the expensive part.
+    let mut fingerprints: HashMap<String, Vec<u32>> = HashMap::new();
+
+    let mut visited = vec![false; candidates.len()];
+    let mut groups = Vec::new();
+
+    for i in 0..candidates.len() {
+        if visited[i] {
+            continue;
+        }
+        let ref_file = candidates[i];
+        let Some(ref_fp) = fingerprint_cached(ref_file, &mut fingerprints, disk_cache, &mut warnings) else {
+            on_progress(fingerprints.len(), total);
+            continue;
+        };
+        on_progress(fingerprints.len(), total);
+        let ref_dur = ref_file.duration_ms.unwrap_or(0) as i64;
+
+        let mut cluster = vec![(ref_file, 1.0f64)];
+
+        for j in (i + 1)..candidates.len() {
+            if visited[j] {
+                continue;
+            }
+            let cand = candidates[j];
+            let cand_dur = cand.duration_ms.unwrap_or(0) as i64;
+            if cand_dur - ref_dur > DURATION_TOLERANCE_MS {
+                // Sorted by duration, so nothing further out can match either.
+                break;
+            }
+
+            let Some(cand_fp) = fingerprint_cached(cand, &mut fingerprints, disk_cache, &mut warnings) else {
+                on_progress(fingerprints.len(), total);
+                continue;
+            };
+            on_progress(fingerprints.len(), total);
+            let score = fingerprint::similarity(&ref_fp, &cand_fp);
+            if score >= threshold {
+                cluster.push((cand, score));
+                visited[j] = true;
+            }
+        }
+
+        visited[i] = true;
+
+        if cluster.len() < 2 {
+            continue;
+        }
+
+        let entries = cluster
+            .iter()
+            .map(|(f, score)| to_duplicate_file(f, None, *score))
+            .collect();
+
+        groups.push(finish_group(
+            format!("acoustic-{}-{}", ref_file.id, cluster.len()),
+            DuplicateMode::Acoustic,
+            format!("{} files sound like the same recording", cluster.len()),
+            entries,
+        ));
+    }
+
+    on_progress(total, total);
+    groups.sort_by(|a, b| b.wasted_bytes.cmp(&a.wasted_bytes));
+    (groups, warnings)
+}
+
+pub fn build_report(groups: Vec<DuplicateGroup>, warnings: Vec<String>) -> DuplicateReport {
     let total_files = groups.iter().map(|g| g.files.len()).sum();
     let reclaimable_bytes = groups.iter().map(|g| g.wasted_bytes).sum();
 
@@ -265,6 +418,7 @@ pub fn build_report(groups: Vec<DuplicateGroup>) -> DuplicateReport {
         total_files,
         reclaimable_bytes,
         groups,
+        warnings,
     }
 }
 

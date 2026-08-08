@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Loader2, Check, Plus, Trash2, Pencil } from "lucide-react";
+import { Loader2, Check, Plus, Trash2, Pencil, ImageIcon, FolderOpen, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,10 +18,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { commands } from "@/lib/tauri";
+import { pickLocalImage, type LocalImage } from "@/lib/localImage";
 import { useLibraryStore } from "@/stores/libraryStore";
 import { useSessionStore } from "@/stores/sessionStore";
 import { toast } from "sonner";
 import type { BatchEdit, BatchPreviewEntry, FieldOp } from "@/lib/types";
+
+type CoverAction = "none" | "set" | "clear";
 
 interface BatchEditDialogProps {
   open: boolean;
@@ -105,6 +108,8 @@ export function BatchEditDialog({
   const [preview, setPreview] = useState<BatchPreviewEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [coverAction, setCoverAction] = useState<CoverAction>("none");
+  const [coverImage, setCoverImage] = useState<LocalImage | null>(null);
   const refreshFiles = useLibraryStore((s) => s.refreshFiles);
   const markManyModified = useSessionStore((s) => s.markManyModified);
 
@@ -124,24 +129,64 @@ export function BatchEditDialog({
     if (!open) {
       setRows([newRow(0)]);
       setPreview([]);
+      setCoverAction("none");
+      setCoverImage(null);
     }
   }, [open]);
+
+  const handleChooseCover = async () => {
+    try {
+      const image = await pickLocalImage();
+      if (!image) return;
+      setCoverImage(image);
+      setCoverAction("set");
+    } catch (e) {
+      toast.error(`Could not read that image: ${e}`);
+    }
+  };
 
   const handleApply = async () => {
     setIsApplying(true);
     try {
-      const results = await commands.applyBatchEdit(paths, rows.map(toBatchEdit));
-      const succeeded = results.filter((r) => r.success);
-      const failed = results.filter((r) => !r.success);
+      const modifiedPaths = new Set<string>();
+      const failures: string[] = [];
 
-      markManyModified(succeeded.map((r) => r.path));
+      if (rows.length > 0) {
+        const results = await commands.applyBatchEdit(paths, rows.map(toBatchEdit));
+        results.forEach((r) => {
+          if (r.success) modifiedPaths.add(r.path);
+          else failures.push(r.error ?? "unknown error");
+        });
+      }
+
+      if (coverAction === "set" && coverImage) {
+        for (const path of paths) {
+          try {
+            await commands.embedCoverArt(path, coverImage.bytes, coverImage.mimeType);
+            modifiedPaths.add(path);
+          } catch (e) {
+            failures.push(String(e));
+          }
+        }
+      } else if (coverAction === "clear") {
+        for (const path of paths) {
+          try {
+            await commands.removeCoverArt(path);
+            modifiedPaths.add(path);
+          } catch (e) {
+            failures.push(String(e));
+          }
+        }
+      }
+
+      markManyModified([...modifiedPaths]);
       await refreshFiles();
 
-      if (failed.length === 0) {
-        toast.success(`Updated ${succeeded.length} files`);
+      if (failures.length === 0) {
+        toast.success(`Updated ${modifiedPaths.size} files`);
       } else {
         toast.warning(
-          `Updated ${succeeded.length}, failed ${failed.length}: ${failed[0].error}`,
+          `Updated ${modifiedPaths.size}, failed ${failures.length}: ${failures[0]}`,
         );
       }
       onOpenChange(false);
@@ -275,6 +320,76 @@ export function BatchEditDialog({
               Preview changes
             </Button>
           </div>
+        </div>
+
+        <div className="shrink-0 border-b p-4">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">
+            Cover art
+          </p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
+              {coverAction === "set" && coverImage ? (
+                <img
+                  src={`data:${coverImage.mimeType};base64,${coverImage.base64}`}
+                  alt="Chosen cover"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <ImageIcon className="h-5 w-5 text-muted-foreground" />
+              )}
+            </div>
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1 text-xs"
+              onClick={handleChooseCover}
+            >
+              <FolderOpen className="h-3 w-3" />
+              Choose from disk
+            </Button>
+
+            {coverAction === "set" && coverImage && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0"
+                onClick={() => {
+                  setCoverAction("none");
+                  setCoverImage(null);
+                }}
+                aria-label="Clear chosen cover"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            )}
+
+            <div className="ml-auto">
+              <Button
+                size="sm"
+                variant={coverAction === "clear" ? "secondary" : "ghost"}
+                className="h-8 gap-1 text-xs"
+                onClick={() => {
+                  if (coverAction === "clear") {
+                    setCoverAction("none");
+                  } else {
+                    setCoverAction("clear");
+                    setCoverImage(null);
+                  }
+                }}
+              >
+                <Trash2 className="h-3 w-3" />
+                Remove cover art
+              </Button>
+            </div>
+          </div>
+          {coverAction !== "none" && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              {coverAction === "set"
+                ? `Applies this picture as the cover art of all ${paths.length} files.`
+                : `Removes existing cover art from all ${paths.length} files.`}
+            </p>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">

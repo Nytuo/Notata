@@ -6,7 +6,8 @@ use walkdir::WalkDir;
 
 use crate::db::queries;
 use crate::error::Result;
-use crate::models::media_file::{DirectoryNode, MediaFile, ScanProgress, ScanResult};
+use crate::metadata::reader::read_audio_properties;
+use crate::models::media_file::{DirectoryNode, MediaFile, MediaType, ScanProgress, ScanResult};
 use crate::scanner::mime::classify_extension;
 use crate::state::AppState;
 
@@ -41,6 +42,18 @@ pub fn scan_directory(
         }
 
         let path = entry.path();
+
+        // macOS AppleDouble sidecar files (e.g. "._Song.mp3") mirror the real
+        // file's extension, so they'd otherwise be indexed as media.
+        if path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with("._"))
+        {
+            skipped += 1;
+            continue;
+        }
+
         let ext = match path.extension().and_then(|e| e.to_str()) {
             Some(e) => e,
             None => {
@@ -84,9 +97,21 @@ pub fn scan_directory(
             .unwrap_or("")
             .to_string();
 
+        let path_str = path.to_string_lossy().to_string();
+
+        // Reading properties opens and parses the container header (not a
+        // full decode), so this is cheap enough to do for every audio file
+        // during a scan. A read failure just leaves these unset rather than
+        // aborting the file's indexing.
+        let audio_properties = if matches!(media_type, MediaType::Audio) {
+            read_audio_properties(&path_str).ok()
+        } else {
+            None
+        };
+
         let media_file = MediaFile {
             id: uuid::Uuid::new_v4().to_string(),
-            path: path.to_string_lossy().to_string(),
+            path: path_str,
             file_name,
             parent_dir,
             media_type,
@@ -95,10 +120,10 @@ pub fn scan_directory(
             modified_at,
             scanned_at: scan_started_at,
             has_cover_art: false,
-            duration_ms: None,
-            bitrate_kbps: None,
-            sample_rate_hz: None,
-            channels: None,
+            duration_ms: audio_properties.as_ref().map(|p| p.duration_ms),
+            bitrate_kbps: audio_properties.as_ref().map(|p| p.bitrate_kbps),
+            sample_rate_hz: audio_properties.as_ref().map(|p| p.sample_rate_hz),
+            channels: audio_properties.as_ref().map(|p| p.channels),
             // Only applied when the row is new; the upsert keeps the original
             // value for paths already indexed.
             first_seen_at: scan_started_at,
@@ -160,7 +185,13 @@ pub fn build_directory_tree(root_path: &str) -> Result<DirectoryNode> {
                 if entry_path.is_dir() {
                     children.push(build_node(&entry_path));
                 } else if entry_path.is_file() {
-                    file_count += 1;
+                    let is_apple_double = entry_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|n| n.starts_with("._"));
+                    if !is_apple_double {
+                        file_count += 1;
+                    }
                 }
             }
         }

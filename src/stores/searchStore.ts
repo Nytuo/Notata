@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import { commands } from "@/lib/tauri";
 import type { ProviderRelease, ProviderSearchResult } from "@/lib/types";
 
@@ -43,8 +44,9 @@ export const useSearchStore = create<SearchState>((set, get) => ({
         artistFilter || undefined,
       );
       set({ results, isSearching: false });
-    } catch {
+    } catch (e) {
       set({ isSearching: false });
+      toast.error(`Search failed: ${e}`);
     }
   },
 
@@ -55,8 +57,9 @@ export const useSearchStore = create<SearchState>((set, get) => ({
     try {
       const releaseDetails = await commands.getReleaseDetails(provider, id);
       set({ releaseDetails, isLoadingDetails: false });
-    } catch {
+    } catch (e) {
       set({ isLoadingDetails: false });
+      toast.error(`Could not load release details: ${e}`);
     }
   },
 

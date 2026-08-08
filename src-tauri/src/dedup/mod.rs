@@ -1,4 +1,6 @@
+pub mod cache;
 pub mod detector;
+pub mod fingerprint;
 
 use serde::{Deserialize, Serialize};
 
@@ -9,6 +11,9 @@ pub enum DuplicateMode {
     Exact,
     /// Same recording by tags, regardless of encoding.
     Fuzzy,
+    /// Same recording by audio content (Chromaprint-style fingerprint),
+    /// regardless of tags, container, or encoding.
+    Acoustic,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +52,17 @@ pub struct DuplicateReport {
     pub total_groups: usize,
     pub total_files: usize,
     pub reclaimable_bytes: u64,
+    /// Files the scan could not evaluate, e.g. because acoustic mode
+    /// failed to decode/fingerprint them — surfaced so a "no duplicates"
+    /// result can be told apart from files that were silently skipped.
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DedupProgress {
+    pub scanned: usize,
+    pub total: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

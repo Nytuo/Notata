@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, Loader2, Check, ImageIcon, AlertCircle } from "lucide-react";
+import { Search, Loader2, Check, ImageIcon, AlertCircle, FolderOpen } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useMetadataStore } from "@/stores/metadataStore";
 import { commands } from "@/lib/tauri";
+import { pickLocalImage } from "@/lib/localImage";
 import { toast } from "sonner";
 import type { CoverArt, CoverArtData } from "@/lib/types";
 
@@ -117,6 +118,23 @@ export function CoverArtPicker({ open, onOpenChange }: CoverArtPickerProps) {
     doSearch(query);
   };
 
+  const handleChooseFromDisk = async () => {
+    try {
+      const image = await pickLocalImage();
+      if (!image) return;
+      setSelected(null);
+      setPreview({
+        data: image.base64,
+        mimeType: image.mimeType,
+        artType: "front",
+        width: null,
+        height: null,
+      });
+    } catch (e) {
+      toast.error(`Could not read that image: ${e}`);
+    }
+  };
+
   const handleSelect = useCallback(async (art: CoverArt) => {
     if (!art.url) return;
     setSelected(art);
@@ -186,6 +204,10 @@ export function CoverArtPicker({ open, onOpenChange }: CoverArtPickerProps) {
                 ) : (
                   <Search className="h-4 w-4" />
                 )}
+              </Button>
+              <Button type="button" variant="outline" onClick={handleChooseFromDisk}>
+                <FolderOpen className="mr-1 h-4 w-4" />
+                Choose from disk
               </Button>
             </form>
 

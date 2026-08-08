@@ -1,5 +1,15 @@
-import { useState } from "react";
-import { Loader2, Copy, Search, Trash2, Star, HardDrive } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import {
+  Loader2,
+  Copy,
+  Search,
+  Trash2,
+  Star,
+  HardDrive,
+  Play,
+  Pause,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +29,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
   Select,
@@ -30,7 +41,7 @@ import {
 import { commands } from "@/lib/tauri";
 import { useLibraryStore } from "@/stores/libraryStore";
 import { toast } from "sonner";
-import type { DuplicateMode, DuplicateReport } from "@/lib/types";
+import type { DedupProgress, DuplicateMode, DuplicateReport } from "@/lib/types";
 
 interface DuplicatesDialogProps {
   open: boolean;
@@ -45,6 +56,28 @@ function formatSize(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
+function mimeTypeFor(format: string | null): string {
+  switch (format?.toUpperCase()) {
+    case "MP3":
+      return "audio/mpeg";
+    case "FLAC":
+      return "audio/flac";
+    case "WAV":
+      return "audio/wav";
+    case "OGG":
+    case "VORBIS":
+      return "audio/ogg";
+    case "OPUS":
+      return "audio/opus";
+    case "M4A":
+    case "AAC":
+    case "MP4":
+      return "audio/mp4";
+    default:
+      return "audio/*";
+  }
+}
+
 export function DuplicatesDialog({ open, onOpenChange }: DuplicatesDialogProps) {
   const [mode, setMode] = useState<DuplicateMode>("fuzzy");
   const [report, setReport] = useState<DuplicateReport | null>(null);
@@ -52,12 +85,67 @@ export function DuplicatesDialog({ open, onOpenChange }: DuplicatesDialogProps) 
   const [isResolving, setIsResolving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [playingPath, setPlayingPath] = useState<string | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState<string | null>(null);
+  const [scanProgress, setScanProgress] = useState<DedupProgress | null>(null);
   const refreshFiles = useLibraryStore((s) => s.refreshFiles);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const previewUrls = useRef<Map<string, string>>(new Map());
+
+  const revokePreviews = () => {
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    previewUrls.current.clear();
+  };
+
+  useEffect(() => {
+    if (!open) {
+      audioRef.current?.pause();
+      setPlayingPath(null);
+      revokePreviews();
+    }
+    return () => {
+      if (!open) return;
+      revokePreviews();
+    };
+  }, [open]);
+
+  const togglePreview = async (file: { path: string; format: string | null }) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (playingPath === file.path) {
+      audio.pause();
+      setPlayingPath(null);
+      return;
+    }
+
+    try {
+      let url = previewUrls.current.get(file.path);
+      if (!url) {
+        setLoadingPreview(file.path);
+        const bytes = await commands.readAudioPreview(file.path);
+        const blob = new Blob([bytes], { type: mimeTypeFor(file.format) });
+        url = URL.createObjectURL(blob);
+        previewUrls.current.set(file.path, url);
+      }
+      audio.src = url;
+      await audio.play();
+      setPlayingPath(file.path);
+    } catch (e) {
+      toast.error(`Could not preview file: ${e}`);
+    } finally {
+      setLoadingPreview(null);
+    }
+  };
 
   const runScan = async () => {
     setIsScanning(true);
     setReport(null);
     setSelected(new Set());
+    setScanProgress(null);
+    const unlisten = await listen<DedupProgress>("dedup:progress", (e) => {
+      setScanProgress(e.payload);
+    });
     try {
       const result = await commands.findDuplicates(mode);
       setReport(result);
@@ -70,10 +158,18 @@ export function DuplicatesDialog({ open, onOpenChange }: DuplicatesDialogProps) 
       if (result.totalGroups === 0) {
         toast.success("No duplicates found");
       }
+      if (result.warnings.length > 0) {
+        toast.warning(
+          `${result.warnings.length} file${result.warnings.length === 1 ? "" : "s"} could not be scanned`,
+          { description: result.warnings.slice(0, 3).join("\n") },
+        );
+      }
     } catch (e) {
       toast.error(`Duplicate scan failed: ${e}`);
     } finally {
+      unlisten();
       setIsScanning(false);
+      setScanProgress(null);
     }
   };
 
@@ -119,6 +215,12 @@ export function DuplicatesDialog({ open, onOpenChange }: DuplicatesDialogProps) 
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="w-[92vw] sm:max-w-6xl h-[85vh] flex flex-col p-0 gap-0">
+          <audio
+            ref={audioRef}
+            onEnded={() => setPlayingPath(null)}
+            onPause={() => setPlayingPath(null)}
+            className="hidden"
+          />
           <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle className="flex items-center gap-2">
               <Copy className="h-5 w-5" />
@@ -137,6 +239,9 @@ export function DuplicatesDialog({ open, onOpenChange }: DuplicatesDialogProps) 
               <SelectContent>
                 <SelectItem value="fuzzy" className="text-xs">
                   Same recording (matched on tags)
+                </SelectItem>
+                <SelectItem value="acoustic" className="text-xs">
+                  Same recording (matched on audio content, slower)
                 </SelectItem>
                 <SelectItem value="exact" className="text-xs">
                   Byte-identical files (slower)
@@ -172,8 +277,20 @@ export function DuplicatesDialog({ open, onOpenChange }: DuplicatesDialogProps) 
                 <p className="text-sm">
                   {mode === "exact"
                     ? "Hashing file contents..."
-                    : "Comparing tags across the library..."}
+                    : mode === "acoustic"
+                      ? "Fingerprinting audio content..."
+                      : "Comparing tags across the library..."}
                 </p>
+                {mode === "acoustic" && scanProgress && scanProgress.total > 0 && (
+                  <div className="w-full max-w-xs space-y-1">
+                    <Progress
+                      value={(scanProgress.scanned / scanProgress.total) * 100}
+                    />
+                    <p className="text-center text-xs text-muted-foreground">
+                      {scanProgress.scanned} / {scanProgress.total} files
+                    </p>
+                  </div>
+                )}
               </div>
             ) : !report ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
@@ -202,6 +319,22 @@ export function DuplicatesDialog({ open, onOpenChange }: DuplicatesDialogProps) 
                           checked={selected.has(file.path)}
                           onCheckedChange={() => toggle(file.path)}
                         />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6 shrink-0"
+                          onClick={() => togglePreview(file)}
+                          disabled={loadingPreview === file.path}
+                          title={playingPath === file.path ? "Pause" : "Preview"}
+                        >
+                          {loadingPreview === file.path ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : playingPath === file.path ? (
+                            <Pause className="h-3 w-3" />
+                          ) : (
+                            <Play className="h-3 w-3" />
+                          )}
+                        </Button>
                         {file.recommendedKeep && (
                           <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-500" />
                         )}
@@ -227,7 +360,7 @@ export function DuplicatesDialog({ open, onOpenChange }: DuplicatesDialogProps) 
                           <Badge variant="outline" className="text-[10px]">
                             {formatSize(file.fileSize)}
                           </Badge>
-                          {group.mode === "fuzzy" && (
+                          {(group.mode === "fuzzy" || group.mode === "acoustic") && (
                             <Badge variant="secondary" className="text-[10px]">
                               {Math.round(file.score * 100)}%
                             </Badge>

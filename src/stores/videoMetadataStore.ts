@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import { commands } from "@/lib/tauri";
 import { useSessionStore } from "./sessionStore";
 import type {
@@ -56,8 +57,9 @@ export const useVideoMetadataStore = create<VideoMetadataState>((set, get) => ({
         isDirty: false,
         isLoading: false,
       });
-    } catch {
+    } catch (e) {
       set({ isLoading: false, currentMetadata: null });
+      toast.error(`Could not read metadata: ${e}`);
     }
   },
 

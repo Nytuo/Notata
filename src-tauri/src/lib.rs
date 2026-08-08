@@ -12,6 +12,7 @@ mod providers;
 mod renamer;
 mod scanner;
 mod state;
+mod transcode;
 
 use std::sync::{Arc, Mutex};
 
@@ -51,6 +52,11 @@ pub fn run() {
                 .to_string();
             std::fs::create_dir_all(&cover_art_cache_dir).ok();
 
+            let fingerprint_cache_path = app_data_dir
+                .join("fingerprint-cache.json")
+                .to_string_lossy()
+                .to_string();
+
             let mut registry = ProviderRegistry::new();
             registry.register(Arc::new(MusicBrainzProvider::new()));
 
@@ -63,6 +69,7 @@ pub fn run() {
                 providers: Mutex::new(registry),
                 video_providers: Mutex::new(video_registry),
                 cover_art_cache_dir,
+                fingerprint_cache_path,
             });
 
             // Providers start unconfigured; load any saved keys.
@@ -110,6 +117,7 @@ pub fn run() {
             commands::renamer::apply_rename,
             commands::dedup::find_duplicates,
             commands::dedup::resolve_duplicates,
+            commands::dedup::read_audio_preview,
             commands::batch::preview_batch_edit,
             commands::batch::apply_batch_edit,
             commands::library::set_root_media_kind,
@@ -126,12 +134,18 @@ pub fn run() {
             commands::book::get_book_cover,
             commands::book::write_book_metadata,
             commands::book::write_book_metadata_batch,
+            commands::book::write_book_cover,
+            commands::fs::read_file_bytes,
             commands::video::get_provider_artwork,
             commands::updater::check_for_update,
             commands::updater::install_update,
             commands::updater::open_releases_page,
             commands::updater::restart_app,
             commands::updater::get_app_version,
+            commands::transcode::list_transcode_formats,
+            commands::transcode::check_ffmpeg_available,
+            commands::transcode::preview_transcode,
+            commands::transcode::transcode_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

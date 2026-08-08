@@ -38,3 +38,5 @@ quick-xml = "0.41.0"
 zip = "8.6.0"
 tauri-plugin-updater = "2.10.1"
 url = "2.5.8"
+rusty-chromaprint = "0.3.0"
+symphonia = { version = "0.5", features = ["mp3", "flac", "aac", "isomp4", "ogg", "vorbis", "wav"] }

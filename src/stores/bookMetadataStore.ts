@@ -1,5 +1,7 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import { commands } from "@/lib/tauri";
+import { pickLocalImage } from "@/lib/localImage";
 import { useSessionStore } from "./sessionStore";
 import type { BookCover, BookMetadata, BookProperties } from "@/lib/types";
 
@@ -12,6 +14,7 @@ interface BookMetadataState {
   isDirty: boolean;
   isLoading: boolean;
   isSaving: boolean;
+  isSavingCover: boolean;
 
   loadMetadata: (path: string) => Promise<void>;
   updateField: <K extends keyof BookMetadata>(
@@ -19,6 +22,7 @@ interface BookMetadataState {
     value: BookMetadata[K],
   ) => void;
   saveMetadata: () => Promise<string>;
+  pickCover: () => Promise<void>;
   revertChanges: () => void;
   clear: () => void;
 }
@@ -32,6 +36,7 @@ export const useBookMetadataStore = create<BookMetadataState>((set, get) => ({
   isDirty: false,
   isLoading: false,
   isSaving: false,
+  isSavingCover: false,
 
   loadMetadata: async (path: string) => {
     set({ isLoading: true, currentPath: path });
@@ -50,8 +55,9 @@ export const useBookMetadataStore = create<BookMetadataState>((set, get) => ({
         isDirty: false,
         isLoading: false,
       });
-    } catch {
+    } catch (e) {
       set({ isLoading: false, currentMetadata: null });
+      toast.error(`Could not read metadata: ${e}`);
     }
   },
 
@@ -90,6 +96,32 @@ export const useBookMetadataStore = create<BookMetadataState>((set, get) => ({
     } catch (e) {
       set({ isSaving: false });
       throw e;
+    }
+  },
+
+  pickCover: async () => {
+    const { currentPath } = get();
+    if (!currentPath) return;
+
+    const image = await pickLocalImage();
+    if (!image) return;
+
+    set({ isSavingCover: true });
+    try {
+      const entryPath = await commands.writeBookCover(
+        currentPath,
+        image.bytes,
+        image.mimeType,
+      );
+      useSessionStore.getState().markModified(currentPath);
+      set({
+        cover: { data: image.base64, mimeType: image.mimeType, entryPath },
+        isSavingCover: false,
+      });
+      toast.success("Cover updated");
+    } catch (e) {
+      set({ isSavingCover: false });
+      toast.error(`Could not set the cover: ${e}`);
     }
   },
 

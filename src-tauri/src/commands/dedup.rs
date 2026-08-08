@@ -1,11 +1,11 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::db::queries;
-use crate::dedup::detector;
-use crate::dedup::{DuplicateMode, DuplicateReport, ResolveOutcome};
+use crate::dedup::{cache as fingerprint_cache, detector};
+use crate::dedup::{DedupProgress, DuplicateMode, DuplicateReport, ResolveOutcome};
 use crate::metadata::reader;
 use crate::models::track::TrackMetadata;
 use crate::state::AppState;
@@ -16,6 +16,7 @@ use crate::state::AppState;
 /// otherwise stall the async runtime.
 #[tauri::command]
 pub async fn find_duplicates(
+    app: AppHandle,
     state: State<'_, AppState>,
     mode: DuplicateMode,
     threshold: Option<f64>,
@@ -24,11 +25,20 @@ pub async fn find_duplicates(
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         queries::get_all_audio_files(&conn).map_err(|e| e.to_string())?
     };
+    let fingerprint_cache_path = state.fingerprint_cache_path.clone();
 
-    let threshold = threshold.unwrap_or(0.90);
+    // Fuzzy's threshold is a Jaro-Winkler string score, which sits close to
+    // 1.0 for genuine matches. Acoustic's is a coverage x tightness score
+    // over matched fingerprint segments, which rarely gets that high even
+    // for identical audio (fades, encoder padding, and frame alignment all
+    // eat into coverage) - so it needs its own, much looser, default.
+    let threshold = threshold.unwrap_or(match mode {
+        DuplicateMode::Acoustic => 0.55,
+        _ => 0.90,
+    });
 
-    let groups = tauri::async_runtime::spawn_blocking(move || match mode {
-        DuplicateMode::Exact => detector::find_exact_duplicates(&files),
+    let (groups, warnings) = tauri::async_runtime::spawn_blocking(move || match mode {
+        DuplicateMode::Exact => (detector::find_exact_duplicates(&files), Vec::new()),
         DuplicateMode::Fuzzy => {
             let mut metadata: HashMap<String, TrackMetadata> = HashMap::new();
             for file in &files {
@@ -36,13 +46,36 @@ pub async fn find_duplicates(
                     metadata.insert(file.path.clone(), meta);
                 }
             }
-            detector::find_fuzzy_duplicates(&files, &metadata, threshold)
+            (
+                detector::find_fuzzy_duplicates(&files, &metadata, threshold),
+                Vec::new(),
+            )
+        }
+        DuplicateMode::Acoustic => {
+            let cache_path = Path::new(&fingerprint_cache_path);
+            let mut cache = fingerprint_cache::load(cache_path);
+            let result =
+                detector::find_acoustic_duplicates(&files, threshold, &mut cache, |scanned, total| {
+                    let _ = app.emit("dedup:progress", DedupProgress { scanned, total });
+                });
+            if let Err(e) = fingerprint_cache::save(cache_path, &cache) {
+                log::warn!("Could not save the fingerprint cache: {}", e);
+            }
+            result
         }
     })
     .await
     .map_err(|e| e.to_string())?;
 
-    Ok(detector::build_report(groups))
+    Ok(detector::build_report(groups, warnings))
+}
+
+/// Read a media file's raw bytes so the frontend can build a blob URL and
+/// preview it in an `<audio>` element while deciding which duplicate to keep.
+#[tauri::command]
+pub fn read_audio_preview(path: String) -> Result<tauri::ipc::Response, String> {
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 /// Move the selected duplicates into a dated quarantine folder and drop them

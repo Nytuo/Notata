@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Search, Loader2, Check, ImageIcon, AlertCircle } from "lucide-react";
+import { Search, Loader2, Check, ImageIcon, AlertCircle, FolderOpen } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { commands } from "@/lib/tauri";
+import { pickLocalImage } from "@/lib/localImage";
 import { useVideoMetadataStore } from "@/stores/videoMetadataStore";
 import { toast } from "sonner";
 import type {
@@ -51,6 +52,7 @@ export function VideoPosterPicker({ open, onOpenChange }: VideoPosterPickerProps
   const [thumbs, setThumbs] = useState<Record<string, Thumb>>({});
   const [selected, setSelected] = useState<RemoteArtwork | null>(null);
   const [preview, setPreview] = useState<Thumb | null>(null);
+  const [localImage, setLocalImage] = useState<Thumb | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingArt, setIsLoadingArt] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
@@ -125,6 +127,7 @@ export function VideoPosterPicker({ open, onOpenChange }: VideoPosterPickerProps
       setThumbs({});
       setSelected(null);
       setPreview(null);
+      setLocalImage(null);
       setHasSearched(false);
       return;
     }
@@ -155,6 +158,7 @@ export function VideoPosterPicker({ open, onOpenChange }: VideoPosterPickerProps
 
   const handleSelect = async (art: RemoteArtwork) => {
     setSelected(art);
+    setLocalImage(null);
     const cached = thumbs[art.url];
     if (cached) {
       setPreview(cached);
@@ -168,12 +172,26 @@ export function VideoPosterPicker({ open, onOpenChange }: VideoPosterPickerProps
     }
   };
 
+  const handleChooseFromDisk = async () => {
+    try {
+      const image = await pickLocalImage();
+      if (!image) return;
+      setSelected(null);
+      const thumb = { data: image.base64, mimeType: image.mimeType };
+      setPreview(thumb);
+      setLocalImage(thumb);
+    } catch (e) {
+      toast.error(`Could not read that image: ${e}`);
+    }
+  };
+
   const handleApply = async () => {
-    if (!selected || !currentPath) return;
+    if (!currentPath || (!selected && !localImage)) return;
     setIsApplying(true);
     try {
-      // Always fetch the full-size version, not the grid thumbnail.
-      const image = await commands.downloadCoverArt(selected.url);
+      // A locally picked file is already full-size bytes; a remote match
+      // needs its full-size version fetched, not the grid thumbnail.
+      const image = localImage ?? (await commands.downloadCoverArt(selected!.url));
       const raw = atob(image.data);
       const bytes = new Uint8Array(raw.length);
       for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
@@ -265,6 +283,10 @@ export function VideoPosterPicker({ open, onOpenChange }: VideoPosterPickerProps
             ) : (
               <Search className="h-3 w-3" />
             )}
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="h-8" onClick={handleChooseFromDisk}>
+            <FolderOpen className="mr-1 h-3 w-3" />
+            Choose from disk
           </Button>
         </form>
 

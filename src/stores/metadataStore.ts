@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import { commands } from "@/lib/tauri";
 import { useSessionStore } from "./sessionStore";
 import type { AudioProperties, CoverArtData, TrackMetadata } from "@/lib/types";
@@ -50,8 +51,9 @@ export const useMetadataStore = create<MetadataState>((set, get) => ({
         isDirty: false,
         isLoading: false,
       });
-    } catch {
+    } catch (e) {
       set({ isLoading: false });
+      toast.error(`Could not read metadata: ${e}`);
     }
   },
 

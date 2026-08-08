@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Trash2, RefreshCw, Library, Loader2, ChevronDown } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -37,6 +38,32 @@ export function Sidebar() {
   useEffect(() => {
     loadRoots();
   }, [loadRoots]);
+
+  const handleRescan = async (root: { id: string; path: string; mediaKind: (typeof roots)[number]["mediaKind"] }) => {
+    try {
+      await addFolder(root.path, root.mediaKind);
+      toast.success(`Rescanned ${root.path}`);
+    } catch (e) {
+      toast.error(`Rescan failed: ${e}`);
+    }
+  };
+
+  const handleRemove = async (root: { id: string; label: string | null; path: string }) => {
+    try {
+      await removeRoot(root.id);
+      toast.success(`Removed ${root.label || root.path} from the library`);
+    } catch (e) {
+      toast.error(`Could not remove library: ${e}`);
+    }
+  };
+
+  const handleKindChange = async (rootId: string, kind: (typeof roots)[number]["mediaKind"]) => {
+    try {
+      await setRootMediaKind(rootId, kind);
+    } catch (e) {
+      toast.error(`Could not change library type: ${e}`);
+    }
+  };
 
   return (
     <nav className="flex h-full w-full flex-col" aria-label="Library folders">
@@ -99,7 +126,7 @@ export function Sidebar() {
                           <DropdownMenuItem
                             key={k.value}
                             className="text-xs"
-                            onClick={() => setRootMediaKind(root.id, k.value)}
+                            onClick={() => handleKindChange(root.id, k.value)}
                           >
                             <k.icon className="mr-2 h-3 w-3" />
                             {k.label}
@@ -127,7 +154,7 @@ export function Sidebar() {
                             variant="ghost"
                             size="icon"
                             className="h-6 w-6"
-                            onClick={() => addFolder(root.path, root.mediaKind)}
+                            onClick={() => handleRescan(root)}
                             disabled={isScanning}
                           >
                             {isScanning ? (
@@ -145,7 +172,7 @@ export function Sidebar() {
                             variant="ghost"
                             size="icon"
                             className="h-6 w-6 text-destructive"
-                            onClick={() => removeRoot(root.id)}
+                            onClick={() => handleRemove(root)}
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>

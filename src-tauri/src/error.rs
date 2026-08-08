@@ -20,6 +20,9 @@ pub enum NotataError {
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
+    #[error("Audio decode error: {0}")]
+    Audio(#[from] symphonia::core::errors::Error),
+
     #[error("Provider error ({provider}): {message}")]
     Provider { provider: String, message: String },
 

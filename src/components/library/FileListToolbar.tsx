@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Pencil,
   Sparkles,
@@ -7,6 +7,7 @@ import {
   X,
   Search,
   LayoutList,
+  AudioWaveform,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ import { useLibraryStore, type StatusFilter } from "@/stores/libraryStore";
 import { useSessionStore } from "@/stores/sessionStore";
 import { BatchEditDialog } from "@/components/batch/BatchEditDialog";
 import { RenameDialog } from "@/components/renamer/RenameDialog";
+import { TranscodeDialog } from "@/components/transcode/TranscodeDialog";
 import type { MediaFile } from "@/lib/types";
 
 const FILTERS: {
@@ -44,34 +46,49 @@ const FILTERS: {
 ];
 
 export function FileListToolbar({ visibleFiles }: { visibleFiles: MediaFile[] }) {
-  const {
-    files,
-    selectedFileIds,
-    statusFilter,
-    searchFilter,
-    setStatusFilter,
-    setSearchFilter,
-    selectAll,
-    clearSelection,
-  } = useLibraryStore();
+  // Selected individually so this toolbar doesn't re-render (and redo its
+  // O(n) counts/filters below) on every unrelated store write.
+  const files = useLibraryStore((s) => s.files);
+  const selectedFileIds = useLibraryStore((s) => s.selectedFileIds);
+  const statusFilter = useLibraryStore((s) => s.statusFilter);
+  const searchFilter = useLibraryStore((s) => s.searchFilter);
+  const setStatusFilter = useLibraryStore((s) => s.setStatusFilter);
+  const setSearchFilter = useLibraryStore((s) => s.setSearchFilter);
+  const selectAll = useLibraryStore((s) => s.selectAll);
+  const clearSelection = useLibraryStore((s) => s.clearSelection);
   const statusOf = useSessionStore((s) => s.statusOf);
   const modifiedPaths = useSessionStore((s) => s.modifiedPaths);
 
   const [batchOpen, setBatchOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [transcodeOpen, setTranscodeOpen] = useState(false);
 
-  // Referenced so counts recompute as edits land.
-  void modifiedPaths;
-  const counts: Record<StatusFilter, number> = {
-    all: files.length,
-    modified: files.filter((f) => statusOf(f) === "modified").length,
-    new: files.filter((f) => statusOf(f) === "new").length,
-  };
+  const counts: Record<StatusFilter, number> = useMemo(
+    () => ({
+      all: files.length,
+      modified: files.filter((f) => statusOf(f) === "modified").length,
+      new: files.filter((f) => statusOf(f) === "new").length,
+    }),
+    // `modifiedPaths` is read indirectly through `statusOf`; listing it here
+    // keeps the memo in step as files are edited.
+    [files, statusOf, modifiedPaths],
+  );
 
-  const selectedPaths = files
-    .filter((f) => selectedFileIds.includes(f.id))
-    .map((f) => f.path);
+  const { selectedPaths, selectedAudioPaths } = useMemo(() => {
+    const selectedIdSet = new Set(selectedFileIds);
+    const selectedFiles = files.filter((f) => selectedIdSet.has(f.id));
+    return {
+      selectedPaths: selectedFiles.map((f) => f.path),
+      selectedAudioPaths: selectedFiles
+        .filter((f) => f.mediaType === "audio")
+        .map((f) => f.path),
+    };
+  }, [files, selectedFileIds]);
   const hasSelection = selectedPaths.length > 0;
+  const allVisibleSelected =
+    visibleFiles.length > 0 &&
+    visibleFiles.every((f) => selectedFileIds.includes(f.id)) &&
+    selectedFileIds.length === visibleFiles.length;
 
   return (
     <>
@@ -128,18 +145,31 @@ export function FileListToolbar({ visibleFiles }: { visibleFiles: MediaFile[] })
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 shrink-0"
-                onClick={() => selectAll(visibleFiles.map((f) => f.id))}
+                size="sm"
+                variant={allVisibleSelected ? "secondary" : "ghost"}
+                className="h-7 shrink-0 gap-1 px-2 text-xs"
+                onClick={() =>
+                  allVisibleSelected
+                    ? clearSelection()
+                    : selectAll(visibleFiles.map((f) => f.id))
+                }
                 disabled={visibleFiles.length === 0}
-                aria-label={`Select all ${visibleFiles.length} files`}
+                aria-label={
+                  allVisibleSelected
+                    ? "Deselect all files"
+                    : `Select all ${visibleFiles.length} files`
+                }
               >
                 <ListChecks className="h-3.5 w-3.5" />
+                <span className="hidden @md:inline">
+                  {allVisibleSelected ? "Deselect all" : "Select all"}
+                </span>
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              Select all {visibleFiles.length} shown
+              {allVisibleSelected
+                ? "Deselect all files"
+                : `Select all ${visibleFiles.length} shown`}
             </TooltipContent>
           </Tooltip>
         </div>
@@ -174,6 +204,17 @@ export function FileListToolbar({ visibleFiles }: { visibleFiles: MediaFile[] })
                 <FileText className="h-3 w-3" />
                 <span className="hidden @md:inline">Rename</span>
               </Button>
+              {selectedAudioPaths.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 shrink-0 gap-1 px-2 text-xs"
+                  onClick={() => setTranscodeOpen(true)}
+                >
+                  <AudioWaveform className="h-3 w-3" />
+                  <span className="hidden @md:inline">Convert</span>
+                </Button>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -202,6 +243,11 @@ export function FileListToolbar({ visibleFiles }: { visibleFiles: MediaFile[] })
         open={renameOpen}
         onOpenChange={setRenameOpen}
         paths={selectedPaths}
+      />
+      <TranscodeDialog
+        open={transcodeOpen}
+        onOpenChange={setTranscodeOpen}
+        paths={selectedAudioPaths}
       />
     </>
   );

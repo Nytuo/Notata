@@ -114,7 +114,11 @@ pub fn upsert_media_file(conn: &Connection, file: &MediaFile, library_root_id: &
             audio_format    = excluded.audio_format,
             file_size       = excluded.file_size,
             modified_at     = excluded.modified_at,
-            scanned_at      = excluded.scanned_at",
+            scanned_at      = excluded.scanned_at,
+            duration_ms     = excluded.duration_ms,
+            bitrate_kbps    = excluded.bitrate_kbps,
+            sample_rate_hz  = excluded.sample_rate_hz,
+            channels        = excluded.channels",
         params![
             file.id,
             library_root_id,

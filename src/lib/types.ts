@@ -390,7 +390,7 @@ export interface RenameOutcome {
 
 // ---------------------------------------------------------------- dedup ----
 
-export type DuplicateMode = "exact" | "fuzzy";
+export type DuplicateMode = "exact" | "fuzzy" | "acoustic";
 
 export interface DuplicateFile {
   path: string;
@@ -419,6 +419,12 @@ export interface DuplicateReport {
   totalGroups: number;
   totalFiles: number;
   reclaimableBytes: number;
+  warnings: string[];
+}
+
+export interface DedupProgress {
+  scanned: number;
+  total: number;
 }
 
 export interface ResolveOutcome {
@@ -507,4 +513,55 @@ export interface BookCover {
   data: string;
   mimeType: string;
   entryPath: string;
+}
+
+// ------------------------------------------------------------ transcode ----
+
+export interface TranscodeFormatInfo {
+  id: string;
+  label: string;
+  extension: string;
+  lossy: boolean;
+  codecName: string;
+  defaultBitrateKbps: number | null;
+}
+
+export type TranscodeDestination =
+  | { kind: "replace_in_place" }
+  | { kind: "folder"; path: string };
+
+export interface TranscodeOptions {
+  targetFormat: string;
+  bitrateKbps: number | null;
+  flacCompression: number | null;
+  preferStreamCopy: boolean;
+  destination: TranscodeDestination;
+}
+
+export interface TranscodePreviewEntry {
+  path: string;
+  sourceExtension: string;
+  outputPath: string;
+  alreadyTargetExtension: boolean;
+}
+
+export interface TranscodeResult {
+  path: string;
+  outputPath: string | null;
+  success: boolean;
+  skipped: boolean;
+  error: string | null;
+}
+
+export interface TranscodeProgress {
+  path: string;
+  index: number;
+  total: number;
+  percent: number;
+}
+
+export interface FfmpegStatus {
+  available: boolean;
+  version: string | null;
+  path: string;
 }

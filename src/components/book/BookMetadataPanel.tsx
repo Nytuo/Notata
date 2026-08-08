@@ -82,8 +82,10 @@ export function BookMetadataPanel() {
     isDirty,
     isLoading,
     isSaving,
+    isSavingCover,
     updateField,
     saveMetadata,
+    pickCover,
     revertChanges,
   } = useBookMetadataStore();
 
@@ -207,24 +209,40 @@ export function BookMetadataPanel() {
       <div className="flex-1 overflow-y-auto p-4">
         <div className="flex flex-col gap-4 @lg:flex-row">
           <div className="flex shrink-0 flex-col items-center @lg:block">
-            {cover ? (
-              <img
-                src={`data:${cover.mimeType};base64,${cover.data}`}
-                alt="Cover"
-                className="rounded-md border object-cover"
-                style={{ width: 150, height: 225 }}
-              />
-            ) : (
-              <div
-                className="flex flex-col items-center justify-center rounded-md border bg-muted"
-                style={{ width: 150, height: 225 }}
-              >
-                <ImageIcon className="h-8 w-8 text-muted-foreground" />
-                <span className="mt-1 px-2 text-center text-xs text-muted-foreground">
-                  No cover
-                </span>
-              </div>
-            )}
+            <button
+              type="button"
+              className="group relative overflow-hidden rounded-md border disabled:cursor-not-allowed disabled:opacity-70"
+              style={{ width: 150, height: 225 }}
+              onClick={() => pickCover()}
+              disabled={readOnly || isSavingCover}
+              title={readOnly ? "Read-only archive" : "Choose a cover from disk"}
+            >
+              {cover ? (
+                <img
+                  src={`data:${cover.mimeType};base64,${cover.data}`}
+                  alt="Cover"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full flex-col items-center justify-center bg-muted">
+                  <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                  <span className="mt-1 px-2 text-center text-xs text-muted-foreground">
+                    No cover
+                  </span>
+                </div>
+              )}
+              {!readOnly && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
+                  {isSavingCover ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-white" />
+                  ) : (
+                    <span className="px-2 text-center text-xs font-medium text-white">
+                      Choose from disk
+                    </span>
+                  )}
+                </div>
+              )}
+            </button>
           </div>
 
           <div className="min-w-0 flex-1 space-y-3">
