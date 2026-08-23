@@ -23,6 +23,9 @@ pub enum NotataError {
     #[error("Audio decode error: {0}")]
     Audio(#[from] symphonia::core::errors::Error),
 
+    #[error("ID3 error: {0}")]
+    Id3(#[from] id3::Error),
+
     #[error("Provider error ({provider}): {message}")]
     Provider { provider: String, message: String },
 

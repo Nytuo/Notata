@@ -60,6 +60,7 @@ export function TranscodeDialog({ open, onOpenChange, paths }: TranscodeDialogPr
   const [bitrate, setBitrate] = useState(256);
   const [flacCompression, setFlacCompression] = useState(5);
   const [preferStreamCopy, setPreferStreamCopy] = useState(true);
+  const [faststart, setFaststart] = useState(false);
   const [replaceInPlace, setReplaceInPlace] = useState(true);
   const [destFolder, setDestFolder] = useState("");
 
@@ -99,10 +100,11 @@ export function TranscodeDialog({ open, onOpenChange, paths }: TranscodeDialogPr
     bitrateKbps: selectedFormat?.lossy ? bitrate : null,
     flacCompression: targetFormat === "flac" ? flacCompression : null,
     preferStreamCopy,
+    faststart: selectedFormat?.extension === "m4a" ? faststart : false,
     destination: replaceInPlace
       ? { kind: "replace_in_place" }
       : { kind: "folder", path: destFolder },
-  }), [targetFormat, selectedFormat, bitrate, flacCompression, preferStreamCopy, replaceInPlace, destFolder]);
+  }), [targetFormat, selectedFormat, bitrate, flacCompression, preferStreamCopy, faststart, replaceInPlace, destFolder]);
 
   const loadPreview = useCallback(async () => {
     if (paths.length === 0) return;
@@ -276,6 +278,17 @@ export function TranscodeDialog({ open, onOpenChange, paths }: TranscodeDialogPr
             Skip re-encoding when the file is already in the target codec
             (lossless container change only)
           </label>
+
+          {selectedFormat?.extension === "m4a" && (
+            <label className="flex items-center gap-2 text-xs">
+              <Checkbox
+                checked={faststart}
+                onCheckedChange={(v) => setFaststart(v === true)}
+              />
+              Fast start (move the moov atom to the front, so players/servers
+              can start streaming before the whole file downloads)
+            </label>
+          )}
 
           <Separator />
 

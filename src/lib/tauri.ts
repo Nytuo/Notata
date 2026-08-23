@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  Allin1Status,
   ApiKeyStatus,
   BookCover,
   BookMetadata,
@@ -8,6 +9,7 @@ import type {
   BatchEdit,
   BatchPreviewEntry,
   BatchResult,
+  Chapter,
   CoverArt,
   CoverArtData,
   DirectoryNode,
@@ -271,4 +273,19 @@ export const commands = {
 
   transcodeFiles: (paths: string[], options: TranscodeOptions) =>
     invoke<TranscodeResult[]>("transcode_files", { paths, options }),
+
+  // ------------------------------------------------------------ chapters ----
+
+  readChapters: (path: string) => invoke<Chapter[]>("read_chapters", { path }),
+
+  writeChapters: (path: string, chapters: Chapter[]) =>
+    invoke<void>("write_chapters", { path, chapters }),
+
+  detectChaptersDsp: (path: string) =>
+    invoke<Chapter[]>("detect_chapters_dsp", { path }),
+
+  checkAllin1Available: () => invoke<Allin1Status>("check_allin1_available"),
+
+  detectChaptersAi: (path: string) =>
+    invoke<Chapter[]>("detect_chapters_ai", { path }),
 } as const;

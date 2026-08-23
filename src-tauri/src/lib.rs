@@ -1,4 +1,5 @@
 mod book;
+mod chapters;
 mod commands;
 mod dedup;
 mod coverart;
@@ -72,7 +73,6 @@ pub fn run() {
                 fingerprint_cache_path,
             });
 
-            // Providers start unconfigured; load any saved keys.
             commands::settings::apply_stored_api_keys(&app.state::<AppState>());
 
             Ok(())
@@ -146,6 +146,11 @@ pub fn run() {
             commands::transcode::check_ffmpeg_available,
             commands::transcode::preview_transcode,
             commands::transcode::transcode_files,
+            commands::chapters::read_chapters,
+            commands::chapters::write_chapters,
+            commands::chapters::detect_chapters_dsp,
+            commands::chapters::check_allin1_available,
+            commands::chapters::detect_chapters_ai,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

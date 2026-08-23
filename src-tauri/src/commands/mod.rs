@@ -1,5 +1,6 @@
 pub mod book;
 pub mod batch;
+pub mod chapters;
 pub mod coverart;
 pub mod dedup;
 pub mod fs;

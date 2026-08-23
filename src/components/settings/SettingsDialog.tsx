@@ -47,7 +47,7 @@ import {
 import { requestUpdateCheck } from "@/components/common/UpdaterModal";
 import { commands } from "@/lib/tauri";
 import { toast } from "sonner";
-import type { ApiKeyStatus, FfmpegStatus } from "@/lib/types";
+import type { Allin1Status, ApiKeyStatus, FfmpegStatus } from "@/lib/types";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -88,12 +88,14 @@ const LIBRARIES = [
   { name: "zip", role: "CBZ and EPUB archives", license: "MIT" },
   { name: "rusqlite", role: "Local library index", license: "MIT" },
   { name: "FFmpeg", role: "Audio transcoding (external, not bundled)", license: "LGPL/GPL" },
+  { name: "all-in-one", role: "AI chapter detection (external, not bundled)", license: "MIT" },
   { name: "reqwest", role: "Provider HTTP calls", license: "MIT / Apache-2.0" },
   { name: "MusicBrainz", role: "Music metadata", license: "Community data" },
   { name: "TMDB / TheTVDB", role: "Video metadata", license: "API terms apply" },
 ];
 
 const PREF_FFMPEG_PATH = "ffmpeg_path";
+const PREF_ALLIN1_PATH = "allin1_path";
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { i18n } = useTranslation();
@@ -106,6 +108,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [ffmpegStatus, setFfmpegStatus] = useState<FfmpegStatus | null>(null);
   const [checkingFfmpeg, setCheckingFfmpeg] = useState(false);
   const [savingFfmpeg, setSavingFfmpeg] = useState(false);
+
+  const [allin1Path, setAllin1Path] = useState("");
+  const [allin1Status, setAllin1Status] = useState<Allin1Status | null>(null);
+  const [checkingAllin1, setCheckingAllin1] = useState(false);
+  const [savingAllin1, setSavingAllin1] = useState(false);
 
   const { mode, accent, language, setMode, setAccent, setLanguage } =
     useSettingsStore();
@@ -121,6 +128,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       .then((v) => setFfmpegPath(v ?? ""))
       .catch(() => {});
     checkFfmpeg();
+
+    commands
+      .getPreference(PREF_ALLIN1_PATH)
+      .then((v) => setAllin1Path(v ?? ""))
+      .catch(() => {});
+    checkAllin1();
   }, [open]);
 
   const checkFfmpeg = async () => {
@@ -149,6 +162,35 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       toast.error(`Could not save the ffmpeg path: ${e}`);
     } finally {
       setSavingFfmpeg(false);
+    }
+  };
+
+  const checkAllin1 = async () => {
+    setCheckingAllin1(true);
+    try {
+      setAllin1Status(await commands.checkAllin1Available());
+    } catch {
+      setAllin1Status({ available: false, found: false, path: "allin1" });
+    } finally {
+      setCheckingAllin1(false);
+    }
+  };
+
+  const handlePickAllin1 = async () => {
+    const selected = await openDialog({ directory: false, multiple: false });
+    if (typeof selected === "string") setAllin1Path(selected);
+  };
+
+  const handleSaveAllin1Path = async () => {
+    setSavingAllin1(true);
+    try {
+      await commands.setPreference(PREF_ALLIN1_PATH, allin1Path.trim());
+      await checkAllin1();
+      toast.success("allin1 path saved");
+    } catch (e) {
+      toast.error(`Could not save the allin1 path: ${e}`);
+    } finally {
+      setSavingAllin1(false);
     }
   };
 
@@ -414,6 +456,95 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     disabled={savingFfmpeg}
                   >
                     {savingFfmpeg ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      "Save"
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  AI chapter detection runs the{" "}
+                  <a
+                    href="https://github.com/mir-aidj/all-in-one"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline underline-offset-2"
+                  >
+                    mir-aidj/all-in-one
+                  </a>{" "}
+                  Python package locally, which isn't bundled with Notata.
+                  Install it with <code className="rounded bg-muted px-1 py-0.5">pip install allin1</code>{" "}
+                  and it'll be found on your PATH automatically, or point at a
+                  specific binary below.
+                </p>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">allin1</span>
+                  {checkingAllin1 && (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  )}
+                  {!checkingAllin1 && allin1Status?.available && (
+                    <Badge
+                      variant="outline"
+                      className="gap-1 border-emerald-500/40 bg-emerald-500/10 text-[10px] text-emerald-700 dark:text-emerald-400"
+                    >
+                      <Check className="h-3 w-3" />
+                      Found
+                    </Badge>
+                  )}
+                  {!checkingAllin1 && !allin1Status?.available && allin1Status?.found && (
+                    <Badge
+                      variant="outline"
+                      className="gap-1 border-amber-500/40 bg-amber-500/10 text-[10px] text-amber-700 dark:text-amber-400"
+                    >
+                      <TriangleAlert className="h-3 w-3" />
+                      Found, but not working
+                    </Badge>
+                  )}
+                  {!checkingAllin1 && !allin1Status?.available && !allin1Status?.found && (
+                    <Badge
+                      variant="outline"
+                      className="gap-1 border-destructive/40 bg-destructive/10 text-[10px] text-destructive"
+                    >
+                      <TriangleAlert className="h-3 w-3" />
+                      Not found
+                    </Badge>
+                  )}
+                </div>
+
+                {!checkingAllin1 && !allin1Status?.available && allin1Status?.found && allin1Status.error && (
+                  <pre className="max-h-24 overflow-y-auto whitespace-pre-wrap rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-800 dark:text-amber-300">
+                    {allin1Status.error}
+                  </pre>
+                )}
+
+                <p className="text-xs text-muted-foreground">
+                  Leave blank to use "allin1" from your PATH — e.g. what a
+                  virtualenv puts it in.
+                </p>
+
+                <div className="flex gap-2">
+                  <Input
+                    className="h-8 flex-1 text-xs"
+                    placeholder="/usr/local/bin/allin1"
+                    value={allin1Path}
+                    onChange={(e) => setAllin1Path(e.target.value)}
+                  />
+                  <Button size="sm" variant="outline" className="h-8" onClick={handlePickAllin1}>
+                    <FolderOpen className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-8"
+                    onClick={handleSaveAllin1Path}
+                    disabled={savingAllin1}
+                  >
+                    {savingAllin1 ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
                       "Save"

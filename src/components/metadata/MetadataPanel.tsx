@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Save, Undo2, Loader2, Search, Music } from "lucide-react";
+import { Save, Undo2, Loader2, Search, Music, BookMarked } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -9,6 +9,7 @@ import { useMetadataStore } from "@/stores/metadataStore";
 import { CoverArtDisplay } from "@/components/coverart/CoverArtDisplay";
 import { CoverArtPicker } from "@/components/coverart/CoverArtPicker";
 import { RematchDialog } from "@/components/metadata/RematchDialog";
+import { ChaptersDialog } from "@/components/chapters/ChaptersDialog";
 import { toast } from "sonner";
 import type { TrackMetadata } from "@/lib/types";
 
@@ -30,6 +31,7 @@ function formatSampleRate(hz: number): string {
 export function MetadataPanel() {
   const { t } = useTranslation("metadata");
   const [rematchOpen, setRematchOpen] = useState(false);
+  const [chaptersOpen, setChaptersOpen] = useState(false);
   const [coverArtPickerOpen, setCoverArtPickerOpen] = useState(false);
   const {
     currentPath,
@@ -98,6 +100,15 @@ export function MetadataPanel() {
         </span>
 
         <div className="ml-auto flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={() => setChaptersOpen(true)}
+          >
+            <BookMarked className="h-3.5 w-3.5" />
+            <span className="hidden @sm:inline">Chapters</span>
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -254,6 +265,12 @@ export function MetadataPanel() {
 
       <RematchDialog open={rematchOpen} onOpenChange={setRematchOpen} />
       <CoverArtPicker open={coverArtPickerOpen} onOpenChange={setCoverArtPickerOpen} />
+      <ChaptersDialog
+        open={chaptersOpen}
+        onOpenChange={setChaptersOpen}
+        path={currentPath}
+        audioProperties={audioProperties}
+      />
     </div>
   );
 }

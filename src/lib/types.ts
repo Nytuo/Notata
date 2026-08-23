@@ -38,11 +38,8 @@ export interface MediaFile {
   bitrateKbps: number | null;
   sampleRateHz: number | null;
   channels: number | null;
-  /** When this path was first indexed; survives re-scans. */
   firstSeenAt: number;
-  /** Last time Notata wrote tags to this file, if ever. */
   lastModifiedByApp: number | null;
-  /** First seen during the most recent scan. */
   isNew: boolean;
 }
 
@@ -65,7 +62,6 @@ export interface ScanProgress {
   currentFile: string;
 }
 
-/** What kind of media a library root holds. */
 export type MediaKind = "music" | "movies" | "series" | "books";
 
 export interface LibraryRoot {
@@ -204,7 +200,6 @@ export interface ProviderInfo {
   supportedTypes: string[];
 }
 
-// ---------------------------------------------------------------- video ----
 
 export type VideoResultType = "movie" | "series";
 
@@ -278,7 +273,6 @@ export interface VideoProviderInfo {
   configured: boolean;
 }
 
-/** A candidate image offered by a provider during poster rematch. */
 export interface RemoteArtwork {
   provider: string;
   artType: string;
@@ -300,7 +294,6 @@ export interface ActorCredit {
   thumb: string | null;
 }
 
-/** The editable metadata for one video file, mirroring NFO fields. */
 export interface VideoMetadata {
   kind: VideoKind;
   title: string | null;
@@ -353,7 +346,6 @@ export interface ApiKeyStatus {
   tvdbConfigured: boolean;
 }
 
-// -------------------------------------------------------------- renamer ----
 
 export type PresetKind = "music" | "movie" | "series";
 
@@ -387,8 +379,6 @@ export interface RenameOutcome {
   success: boolean;
   error: string | null;
 }
-
-// ---------------------------------------------------------------- dedup ----
 
 export type DuplicateMode = "exact" | "fuzzy" | "acoustic";
 
@@ -434,8 +424,6 @@ export interface ResolveOutcome {
   error: string | null;
 }
 
-// ---------------------------------------------------------------- batch ----
-
 export type FieldOp =
   | { kind: "set"; value: string }
   | { kind: "clear" }
@@ -461,13 +449,10 @@ export interface BatchResult {
   error: string | null;
 }
 
-// --------------------------------------------------------- comics/books ----
-
 export type BookKind = "comic" | "ebook";
 
 export type BookMetadataSource = "comic_info" | "opf" | "filename" | "none";
 
-/** Editable metadata for a comic issue or an ebook. */
 export interface BookMetadata {
   kind: BookKind;
   title: string | null;
@@ -515,8 +500,6 @@ export interface BookCover {
   entryPath: string;
 }
 
-// ------------------------------------------------------------ transcode ----
-
 export interface TranscodeFormatInfo {
   id: string;
   label: string;
@@ -535,6 +518,7 @@ export interface TranscodeOptions {
   bitrateKbps: number | null;
   flacCompression: number | null;
   preferStreamCopy: boolean;
+  faststart: boolean;
   destination: TranscodeDestination;
 }
 
@@ -564,4 +548,24 @@ export interface FfmpegStatus {
   available: boolean;
   version: string | null;
   path: string;
+}
+
+
+export interface Chapter {
+  id: string;
+  title: string;
+  startMs: number;
+  endMs: number;
+}
+
+export interface ChapterDetectProgress {
+  stage: string;
+  percent: number;
+}
+
+export interface Allin1Status {
+  available: boolean;
+  found: boolean;
+  path: string;
+  error?: string | null;
 }

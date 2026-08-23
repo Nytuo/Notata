@@ -141,7 +141,6 @@ fn build_args(
                 args.push("pcm_s16be".into());
             }
             other => {
-                // Should not happen, formats::find() already validated the id.
                 args.push("-c:a".into());
                 args.push(other.into());
             }
@@ -152,9 +151,6 @@ fn build_args(
     args
 }
 
-/// Copy tags and embedded cover art from the source onto the freshly
-/// transcoded output using the same lofty-backed reader/writer the rest of
-/// the app uses, so tags stay consistent regardless of what ffmpeg preserved.
 fn carry_over_metadata(src: &str, output: &str) -> Result<(), String> {
     let metadata = reader::read_metadata(src).map_err(|e| e.to_string())?;
     writer::write_metadata(output, &metadata).map_err(|e| e.to_string())?;
@@ -168,8 +164,6 @@ fn carry_over_metadata(src: &str, output: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Transcode a single file. `on_progress` receives 0.0..=1.0 while ffmpeg
-/// runs; it is not called at all when duration can't be probed.
 pub async fn transcode_one<F: FnMut(f64)>(
     ffmpeg_path: &str,
     ffprobe_path: &str,
@@ -229,9 +223,6 @@ pub async fn transcode_one<F: FnMut(f64)>(
         }
     }
 
-    // Write to a temp file first so a same-path replace never reads and
-    // writes the same file at once, and a failed run never clobbers the
-    // original.
     let tmp_output: PathBuf = {
         let out = Path::new(&final_output);
         let dir = out.parent().unwrap_or_else(|| Path::new(""));
@@ -275,6 +266,39 @@ pub async fn transcode_one<F: FnMut(f64)>(
 
     if let Err(e) = carry_over_metadata(path, &tmp_output_str) {
         log::warn!("Transcoded {} but could not carry over tags: {}", path, e);
+    }
+
+    if fmt.extension == "m4a" && options.faststart {
+        let faststart_tmp = tmp_output.with_extension("faststart.m4a");
+        let faststart_tmp_str = faststart_tmp.to_string_lossy().to_string();
+        let remux_args = vec![
+            "-y".into(),
+            "-i".into(),
+            tmp_output_str.clone(),
+            "-map_metadata".into(),
+            "0".into(),
+            "-c".into(),
+            "copy".into(),
+            "-movflags".into(),
+            "+faststart".into(),
+            faststart_tmp_str.clone(),
+        ];
+        match ffmpeg::run_with_progress(ffmpeg_path, &remux_args, None, |_| {}).await {
+            Ok(status) if status.success() => {
+                if let Err(e) = std::fs::rename(&faststart_tmp, &tmp_output) {
+                    log::warn!("Transcoded {} but could not apply faststart: {}", path, e);
+                    let _ = std::fs::remove_file(&faststart_tmp);
+                }
+            }
+            Ok(_) => {
+                log::warn!("Transcoded {} but the faststart remux failed; keeping the regular layout", path);
+                let _ = std::fs::remove_file(&faststart_tmp);
+            }
+            Err(e) => {
+                log::warn!("Transcoded {} but could not run the faststart remux: {}", path, e);
+                let _ = std::fs::remove_file(&faststart_tmp);
+            }
+        }
     }
 
     if replacing_in_place {
