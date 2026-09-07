@@ -169,6 +169,11 @@ jobs:
     # run, just not to have all succeeded.
     if: always()
     runs-on: ubuntu-24.04
+    # flatpak-builder isn't on the stock runner image; the action expects to
+    # run inside the Freedesktop-based image that ships it.
+    container:
+      image: bilelmoussaoui/flatpak-github-actions:freedesktop-24.08
+      options: --privileged
     steps:
       - uses: actions/checkout@v4
 
@@ -185,6 +190,25 @@ jobs:
           bundle: notata.flatpak
           manifest-path: flatpak/fr.nytuo.notata.yml
           cache-key: flatpak-builder-${{ github.sha }}
+          upload-artifact: true
+          artifact-name: notata-flatpak
+
+  # Separate job so the release upload runs on the stock runner (the flatpak
+  # container image has no `gh` CLI).
+  flatpak-release:
+    needs: flatpak
+    if: always() && needs.flatpak.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: read app version
+        id: version
+        run: echo "value=$(jq -r .version src-tauri/tauri.conf.json)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: notata-flatpak
 
       - name: upload flatpak to release
         shell: bash

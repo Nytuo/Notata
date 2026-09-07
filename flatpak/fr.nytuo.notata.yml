@@ -30,10 +30,17 @@ modules:
   - name: notata
     buildsystem: simple
     build-commands:
-      - curl -fsSL https://bun.sh/install | bash
-      - export PATH="$HOME/.bun/bin:$PATH" && bun install --cwd notata-src --frozen-lockfile
-      - export PATH="$HOME/.bun/bin:$PATH" && bun run --cwd notata-src build
-      - cargo build --release --manifest-path notata-src/src-tauri/Cargo.toml
+      # One shell so the installed-bun PATH survives across steps, and an
+      # explicit BUN_INSTALL in the build dir since $HOME isn't reliably set
+      # (or writable) inside flatpak-builder's per-module environment.
+      - |
+        set -eux
+        export BUN_INSTALL="$PWD/.bun"
+        curl -fsSL https://bun.sh/install | bash
+        export PATH="$BUN_INSTALL/bin:$PATH"
+        bun install --cwd notata-src --frozen-lockfile
+        bun run --cwd notata-src build
+        cargo build --release --manifest-path notata-src/src-tauri/Cargo.toml
       - install -Dm755 notata-src/src-tauri/target/release/notata /app/bin/notata
       - install -Dm644 notata-src/src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/fr.nytuo.notata.png
       - install -Dm644 fr.nytuo.notata.desktop /app/share/applications/fr.nytuo.notata.desktop
