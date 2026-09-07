@@ -31,7 +31,7 @@ jobs:
           ALL='[
             {"id":"linux-x64","runs_on":"ubuntu-24.04"},
             {"id":"linux-arm64","runs_on":"ubuntu-24.04-arm"},
-            {"id":"macos-aarch64","runs_on":"macos-latest","target":"aarch64-apple-darwin","bundles":"dmg"},
+            {"id":"macos-aarch64","runs_on":"macos-latest","target":"aarch64-apple-darwin","bundles":"app,dmg"},
             {"id":"windows-x64","runs_on":"windows-2022","bundles":"nsis"},
             {"id":"windows-aarch64","runs_on":"windows-2022","target":"aarch64-pc-windows-msvc","bundles":"nsis"}
           ]'
