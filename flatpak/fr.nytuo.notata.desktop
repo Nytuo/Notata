@@ -1,9 +1,10 @@
 [Desktop Entry]
 Type=Application
 Name=Notata
-Comment=Metadata manager for music, movies, series, comics, and books
+Comment=Metadata manager for music, movies, series, comics and books
 Exec=notata
 Icon=fr.nytuo.notata
 Terminal=false
 Categories=AudioVideo;Audio;Video;Office;
+Keywords=tags;tagger;metadata;id3;nfo;musicbrainz;rename;
 StartupWMClass=Notata

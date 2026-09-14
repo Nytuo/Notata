@@ -43,3 +43,9 @@ symphonia = { version = "0.5", features = ["mp3", "flac", "aac", "isomp4", "ogg"
 id3 = "1"
 rustfft = "6"
 ndarray = "0.17"
+
+[features]
+default = ["ai"]
+# AI chapter detection through the external allin1 tool. Disabled in the
+# Flatpak, where the sandbox can't run it; the UI hides the feature.
+ai = []

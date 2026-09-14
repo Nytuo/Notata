@@ -138,11 +138,13 @@ export function ChaptersDialog({
     try {
       setAllin1Status(await commands.checkAllin1Available());
     } catch {
-      setAllin1Status({ available: false, found: false, path: "allin1" });
+      setAllin1Status({ enabled: true, available: false, found: false, path: "allin1" });
     } finally {
       setCheckingAllin1(false);
     }
   };
+
+  const aiEnabled = allin1Status?.enabled !== false;
 
   useEffect(() => {
     if (!open) return;
@@ -364,7 +366,7 @@ export function ChaptersDialog({
                 variant="outline"
                 className="h-7 gap-1 text-xs"
                 onClick={handleDetectAi}
-                disabled={isBusy || checkingAllin1}
+                disabled={isBusy || checkingAllin1 || !aiEnabled}
               >
                 {isDetecting === "ai" ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -373,7 +375,7 @@ export function ChaptersDialog({
                 )}
                 Detect (AI)
               </Button>
-              {checkingAllin1 ? (
+              {!aiEnabled ? null : checkingAllin1 ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
               ) : allin1Status?.available ? (
                 <Badge
@@ -413,6 +415,7 @@ export function ChaptersDialog({
               </Button>
             </div>
 
+            {aiEnabled && (
             <div className="flex items-start gap-2 rounded-md border bg-muted/40 p-2.5 text-xs text-muted-foreground">
               <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <div className="space-y-1">
@@ -457,6 +460,7 @@ export function ChaptersDialog({
                 )}
               </div>
             </div>
+            )}
 
             {isDetecting && detectProgress && (
               <div className="space-y-1.5">

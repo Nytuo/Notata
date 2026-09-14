@@ -1,60 +1,84 @@
-# Flatpak manifest for Notata.
-#
-# The Rust build runs inside the sandbox rather than repackaging a prebuilt
-# AppImage: bun and the crates.io registry both need network access during
-# the build, which flatpak-builder grants per-module via build-args, and
-# Tauri's asset embedding happens in build.rs at compile time — a plain
-# `cargo build` after `bun run build` is enough, no bundler CLI needed here.
 app-id: fr.nytuo.notata
-runtime: org.freedesktop.Platform
-runtime-version: '24.08'
-sdk: org.freedesktop.Sdk
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.node24
 command: notata
 finish-args:
   - --share=ipc
-  - --socket=fallback-x11
   - --socket=wayland
+  - --socket=fallback-x11
   - --socket=pulseaudio
   - --device=dri
-  # Broad on purpose: the app is a general-purpose tagger the user points at
-  # arbitrary library folders via a native file picker, not a fixed content
-  # source like ~/Music.
-  - --filesystem=host
+  - --share=network
+  - --filesystem=home
+  - --filesystem=/media
+  - --filesystem=/run/media
+  - --filesystem=/mnt
+
 build-options:
-  append-path: /usr/lib/sdk/rust-stable/bin
-  build-args:
-    - --share=network
+  append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node24/bin
+  env:
+    CARGO_HOME: /run/build/notata/cargo
+    CARGO_NET_OFFLINE: 'true'
+
 modules:
+  - name: ffmpeg
+    config-opts:
+      - --enable-static
+      - --disable-shared
+      - --disable-doc
+      - --disable-debug
+      - --disable-ffplay
+      - --enable-gpl
+      - --enable-libmp3lame
+      - --enable-libopus
+      - --enable-libvorbis
+    cleanup:
+      - /include
+      - /lib
+      - /share
+    sources:
+      - type: archive
+        url: https://ffmpeg.org/releases/ffmpeg-7.1.2.tar.xz
+        sha256: 089bc60fb59d6aecc5d994ff530fd0dcb3ee39aa55867849a2bbc4e555f9c304
+        x-checker-data:
+          type: anitya
+          project-id: 5405
+          url-template: https://ffmpeg.org/releases/ffmpeg-$version.tar.xz
+
   - name: notata
     buildsystem: simple
+    build-options:
+      env:
+        XDG_CACHE_HOME: /run/build/notata/flatpak-node/cache
+        npm_config_cache: /run/build/notata/flatpak-node/npm-cache
+        npm_config_offline: 'true'
     build-commands:
-      # One shell so the installed-bun PATH survives across steps, and an
-      # explicit BUN_INSTALL in the build dir since $HOME isn't reliably set
-      # (or writable) inside flatpak-builder's per-module environment.
-      - |
-        set -eux
-        export BUN_INSTALL="$PWD/.bun"
-        curl -fsSL https://bun.sh/install | bash
-        export PATH="$BUN_INSTALL/bin:$PATH"
-        bun install --cwd notata-src --frozen-lockfile
-        bun run --cwd notata-src build
-        cargo build --release --manifest-path notata-src/src-tauri/Cargo.toml
-      - install -Dm755 notata-src/src-tauri/target/release/notata /app/bin/notata
-      - install -Dm644 notata-src/src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/fr.nytuo.notata.png
-      - install -Dm644 fr.nytuo.notata.desktop /app/share/applications/fr.nytuo.notata.desktop
-      - install -Dm644 fr.nytuo.notata.metainfo.xml /app/share/metainfo/fr.nytuo.notata.metainfo.xml
+      - npm ci --offline --ignore-scripts
+      - npm run build
+      - cargo --offline build --release --manifest-path src-tauri/Cargo.toml --no-default-features --features tauri/custom-protocol
+      - install -Dm755 src-tauri/target/release/notata ${FLATPAK_DEST}/bin/notata
+      - install -Dm644 src-tauri/icons/icon.png ${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/${FLATPAK_ID}.png
+      - install -Dm644 ${FLATPAK_ID}.desktop ${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop
+      - install -Dm644 ${FLATPAK_ID}.metainfo.xml ${FLATPAK_DEST}/share/metainfo/${FLATPAK_ID}.metainfo.xml
     sources:
       - type: dir
         path: ..
-        dest: notata-src
         skip:
+          - .git
+          - .claude
           - node_modules
           - dist
+          - demix
           - src-tauri/target
-          - .git
+          - flatpak/build-dir
+          - flatpak/.flatpak-builder
       - type: file
         path: fr.nytuo.notata.desktop
       - type: file
         path: fr.nytuo.notata.metainfo.xml
+      - cargo-sources.json
+      - node-sources.json

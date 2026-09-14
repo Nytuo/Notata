@@ -41,6 +41,10 @@ fn build_updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, Strin
 
 #[tauri::command]
 pub async fn check_for_update(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
+    if std::path::Path::new("/.flatpak-info").exists() {
+        return Ok(None);
+    }
+
     let updater = build_updater(&app)?;
 
     let update = updater

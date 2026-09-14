@@ -44,6 +44,15 @@ pub async fn detect_chapters_dsp(app: AppHandle, path: String) -> Result<Vec<Cha
 
 #[tauri::command]
 pub async fn check_allin1_available(state: State<'_, AppState>) -> Result<Allin1Status, String> {
+    if !cfg!(feature = "ai") {
+        return Ok(Allin1Status {
+            enabled: false,
+            available: false,
+            found: false,
+            path: String::new(),
+            error: None,
+        });
+    }
     let allin1_path = allin1::resolve_allin1_path(&state);
     Ok(allin1::check_available(&allin1_path).await)
 }
@@ -54,6 +63,9 @@ pub async fn detect_chapters_ai(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<Vec<Chapter>, String> {
+    if !cfg!(feature = "ai") {
+        return Err("AI chapter detection is not included in this build".to_string());
+    }
     let allin1_path = allin1::resolve_allin1_path(&state);
     allin1::detect(&app, &allin1_path, &path, |stage, percent| {
         emit_progress(&app, stage, percent)

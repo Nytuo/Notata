@@ -1,33 +1,94 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
   <id>fr.nytuo.notata</id>
+
   <name>Notata</name>
-  <summary>Tag your media once, and let every server read it</summary>
-  <metadata_license>MIT</metadata_license>
-  <project_license>GPL-3.0-or-later</project_license>
-  <developer_name>BEUX Arnaud (Nytuo)</developer_name>
+  <summary>Tag your media for every server</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+
+  <content_rating type="oars-1.1" />
+
+  <developer id="fr.nytuo">
+    <name>Nytuo (Arnaud BEUX)</name>
+  </developer>
+
+  <url type="homepage">https://nytuo.fr/software/notata</url>
+  <url type="donation">https://ko-fi.com/nytuo</url>
+  <url type="bugtracker">https://github.com/Nytuo/Notata/issues</url>
+  <url type="contact">https://nytuo.fr/contact</url>
+  <url type="vcs-browser">https://github.com/Nytuo/Notata</url>
+
+  <recommends>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </recommends>
+
   <description>
     <p>
-      Notata reads and writes metadata for music, movies, series, comics, and
-      books, using the formats media servers already understand: embedded
-      audio tags, Kodi-style NFO sidecars, and the XML inside CBZ and EPUB
-      archives.
+      Notata reads and writes metadata for music, movies, series, comics and books, using the formats media servers such as Jellyfin, Plex, Kodi, Navidrome and Calibre already understand. Nothing is locked in a proprietary database: tags go straight into your files.
     </p>
-    <p>
-      Includes MusicBrainz and cover art lookup for music, TMDB/TheTVDB
-      lookup for movies and series, batch editing, template-based renaming,
-      and duplicate detection.
-    </p>
+    <p>What Notata can do:</p>
+    <ul>
+      <li>Edit embedded audio tags, Kodi-style NFO sidecars and posters, ComicInfo.xml inside CBZ archives and metadata inside EPUB packages</li>
+      <li>Look up metadata and artwork from MusicBrainz, Cover Art Archive, Deezer, TMDB and TheTVDB</li>
+      <li>Edit many files at once with batch editing</li>
+      <li>Rename files safely with templates for Plex, Jellyfin, Navidrome and Calibre, with a dry run that checks for collisions</li>
+      <li>Find duplicate tracks, even across different encodings, and move copies to a quarantine folder</li>
+      <li>Transcode audio files between common formats</li>
+    </ul>
   </description>
+
   <launchable type="desktop-id">fr.nytuo.notata.desktop</launchable>
-  <url type="homepage">https://github.com/Nytuo/Notata</url>
-  <url type="bugtracker">https://github.com/Nytuo/Notata/issues</url>
-  <content_rating type="oars-1.1" />
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://pocket.nytuo.fr/api/files/gpmjfgb6ve1gr0u/keghxjxss0vuw59/snapzy_2026_08_24_10_45_57_672_kqch4jxavv.webp</image>
+    </screenshot>
+    <screenshot>
+      <image>https://pocket.nytuo.fr/api/files/gpmjfgb6ve1gr0u/keghxjxss0vuw59/snapzy_2026_08_24_10_46_18_079_emkvl2eb91.webp</image>
+    </screenshot>
+    <screenshot>
+      <image>https://pocket.nytuo.fr/api/files/gpmjfgb6ve1gr0u/keghxjxss0vuw59/snapzy_2026_08_24_10_46_50_476_l1eprxvdf6.webp</image>
+    </screenshot>
+    <screenshot>
+      <image>https://pocket.nytuo.fr/api/files/gpmjfgb6ve1gr0u/keghxjxss0vuw59/snapzy_2026_08_24_10_47_35_678_1yct4bflvb.webp</image>
+    </screenshot>
+    <screenshot>
+      <image>https://pocket.nytuo.fr/api/files/gpmjfgb6ve1gr0u/keghxjxss0vuw59/snapzy_2026_08_24_10_48_18_890_qp2dz0pie2.webp</image>
+    </screenshot>
+    <screenshot>
+      <image>https://pocket.nytuo.fr/api/files/gpmjfgb6ve1gr0u/keghxjxss0vuw59/snapzy_2026_08_24_10_50_05_522_l4nmfspxjf.webp</image>
+    </screenshot>
+    <screenshot>
+      <image>https://pocket.nytuo.fr/api/files/gpmjfgb6ve1gr0u/keghxjxss0vuw59/snapzy_2026_08_24_10_52_35_275_i8v9diblw3.webp</image>
+    </screenshot>
+    <screenshot>
+      <image>https://pocket.nytuo.fr/api/files/gpmjfgb6ve1gr0u/keghxjxss0vuw59/snapzy_2026_08_24_11_08_14_865_h2khr33cjj.webp</image>
+    </screenshot>
+  </screenshots>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Utility</category>
+  </categories>
+
+  <keywords>
+    <keyword>tagger</keyword>
+    <keyword>metadata</keyword>
+    <keyword>id3</keyword>
+    <keyword>nfo</keyword>
+    <keyword>musicbrainz</keyword>
+  </keywords>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#B3F2E0</color>
+    <color type="primary" scheme_preference="dark">#11593F</color>
+  </branding>
+
   <releases>
-    <release version="0.2.0" date="2026-07-31">
-      <description>
-        <p>Initial release.</p>
-      </description>
-    </release>
+    <release version="0.2.0" date="2026-09-07"/>
+    <release version="0.1.0" date="2026-07-31"/>
   </releases>
 </component>

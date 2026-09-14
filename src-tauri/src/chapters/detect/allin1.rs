@@ -15,6 +15,7 @@ use super::super::Chapter;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Allin1Status {
+    pub enabled: bool,
     pub available: bool,
     pub found: bool,
     pub path: String,
@@ -37,6 +38,7 @@ pub async fn check_available(allin1_path: &str) -> Allin1Status {
     let output = Command::new(allin1_path).arg("--help").output().await;
     match output {
         Ok(out) if out.status.success() => Allin1Status {
+            enabled: true,
             available: true,
             found: true,
             path: allin1_path.to_string(),
@@ -46,6 +48,7 @@ pub async fn check_available(allin1_path: &str) -> Allin1Status {
             let stderr = String::from_utf8_lossy(&out.stderr);
             let tail: String = stderr.lines().rev().take(5).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n");
             Allin1Status {
+                enabled: true,
                 available: false,
                 found: true,
                 path: allin1_path.to_string(),
@@ -57,6 +60,7 @@ pub async fn check_available(allin1_path: &str) -> Allin1Status {
             }
         }
         Err(e) => Allin1Status {
+            enabled: true,
             available: false,
             found: false,
             path: allin1_path.to_string(),

@@ -170,7 +170,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     try {
       setAllin1Status(await commands.checkAllin1Available());
     } catch {
-      setAllin1Status({ available: false, found: false, path: "allin1" });
+      setAllin1Status({ enabled: true, available: false, found: false, path: "allin1" });
     } finally {
       setCheckingAllin1(false);
     }
@@ -464,6 +464,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 </div>
               </div>
 
+              {allin1Status?.enabled && (
+              <>
               <Separator />
 
               <div className="space-y-2">
@@ -552,6 +554,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   </Button>
                 </div>
               </div>
+              </>
+              )}
             </TabsContent>
 
             <TabsContent value="about" className="mt-0 space-y-4">

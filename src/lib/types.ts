@@ -564,6 +564,7 @@ export interface ChapterDetectProgress {
 }
 
 export interface Allin1Status {
+  enabled: boolean;
   available: boolean;
   found: boolean;
   path: string;
