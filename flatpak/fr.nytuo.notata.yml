@@ -7,7 +7,7 @@
 # `cargo build` after `bun run build` is enough, no bundler CLI needed here.
 app-id: fr.nytuo.notata
 runtime: org.freedesktop.Platform
-runtime-version: '23.08'
+runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
