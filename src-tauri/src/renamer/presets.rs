@@ -97,6 +97,31 @@ pub fn builtin_presets() -> Vec<RenamePreset> {
             description: "Show (Year)/Season 01/Show S01E01 Title.ext".into(),
         },
         // ---- Comics & books ----------------------------------------------
+        // Jellyfin: Books/Author/Book/Book.epub, Comics/Title (Year)/Title #001 (Year).cbz
+        RenamePreset {
+            id: "jellyfin-book".into(),
+            label: "Jellyfin — Books".into(),
+            server: "Jellyfin".into(),
+            kind: PresetKind::Book,
+            template: "{author}/{title}[ ({year})]/{title}[ ({year})]".into(),
+            description: "Author/Book (Year)/Book (Year).epub".into(),
+        },
+        RenamePreset {
+            id: "jellyfin-comic".into(),
+            label: "Jellyfin — Comics".into(),
+            server: "Jellyfin".into(),
+            kind: PresetKind::Book,
+            template: "{series}[ ({year})]/{series}[ #{number:03}][ ({year})]".into(),
+            description: "Comic (Year)/Comic #001 (Year).cbz".into(),
+        },
+        RenamePreset {
+            id: "jellyfin-audiobook".into(),
+            label: "Jellyfin — Audiobooks".into(),
+            server: "Jellyfin".into(),
+            kind: PresetKind::Book,
+            template: "{albumartist}/{album}/{filename}".into(),
+            description: "Author/Book/file.mp3 (from artist and album tags)".into(),
+        },
         RenamePreset {
             id: "comic-series".into(),
             label: "Comics — Series/Issue".into(),

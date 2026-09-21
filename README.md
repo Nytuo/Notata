@@ -179,6 +179,9 @@ Available fields depend on the media type — music exposes `albumartist`,
 | Jellyfin — Movies | `Movie (Year)/Movie (Year) [imdbid-tt123].ext` |
 | Plex — TV Shows | `Show (Year)/Season 01/Show - s01e01 - Title.ext` |
 | Jellyfin — TV Shows | `Show (Year)/Season 01/Show S01E01 Title.ext` |
+| Jellyfin — Books | `Author/Book (Year)/Book (Year).epub` |
+| Jellyfin — Comics | `Comic (Year)/Comic #001 (Year).cbz` |
+| Jellyfin — Audiobooks | `Author/Book/file.mp3` (artist and album tags) |
 | Comics — Series/Issue | `Series/Series #012 (2011).cbz` |
 | Books — Author/Title | `Author/Series/Title (Year).epub` |
 

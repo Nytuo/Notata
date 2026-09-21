@@ -303,6 +303,42 @@ mod tests {
         );
     }
 
+    fn preset_template(id: &str) -> String {
+        presets::builtin_presets()
+            .into_iter()
+            .find(|p| p.id == id)
+            .unwrap()
+            .template
+    }
+
+    #[test]
+    fn jellyfin_book_preset_follows_author_book_layout() {
+        let files = vec![(
+            "/in/dune.epub".to_string(),
+            fields(&[("title", "Dune"), ("author", "Frank Herbert"), ("year", "1965")]),
+        )];
+        let plan = build_plan(&preset_template("jellyfin-book"), &files, Some("/lib")).unwrap();
+
+        assert_eq!(
+            plan.entries[0].relative_target,
+            "Frank Herbert/Dune (1965)/Dune (1965).epub"
+        );
+    }
+
+    #[test]
+    fn jellyfin_comic_preset_uses_padded_issue_number() {
+        let files = vec![(
+            "/in/pm.cbz".to_string(),
+            fields(&[("series", "Plastic Man"), ("number", "2"), ("year", "1944")]),
+        )];
+        let plan = build_plan(&preset_template("jellyfin-comic"), &files, Some("/lib")).unwrap();
+
+        assert_eq!(
+            plan.entries[0].relative_target,
+            "Plastic Man (1944)/Plastic Man #002 (1944).cbz"
+        );
+    }
+
     #[test]
     fn optional_groups_keep_partial_metadata_usable() {
         // A known title but no year should still rename cleanly.
