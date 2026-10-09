@@ -32,17 +32,22 @@ pub async fn download_cover_art(url: String) -> Result<CoverArtData, String> {
 
 #[tauri::command]
 pub fn embed_cover_art(
+    state: State<'_, AppState>,
     path: String,
     image_data: Vec<u8>,
     mime_type: String,
 ) -> Result<(), String> {
     crate::coverart::manager::embed_cover_art_in_file(&path, &image_data, &mime_type)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    crate::commands::metadata::refresh_analysis(&state, &path);
+    Ok(())
 }
 
 #[tauri::command]
-pub fn remove_cover_art(path: String) -> Result<(), String> {
-    crate::coverart::manager::remove_cover_art_from_file(&path).map_err(|e| e.to_string())
+pub fn remove_cover_art(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    crate::coverart::manager::remove_cover_art_from_file(&path).map_err(|e| e.to_string())?;
+    crate::commands::metadata::refresh_analysis(&state, &path);
+    Ok(())
 }
 
 #[tauri::command]

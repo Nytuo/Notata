@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useMetadataStore } from "@/stores/metadataStore";
+import { useLibraryStore } from "@/stores/libraryStore";
 import { commands } from "@/lib/tauri";
 import { pickLocalImage } from "@/lib/localImage";
 import { toast } from "sonner";
@@ -170,6 +171,7 @@ export function CoverArtPicker({ open, onOpenChange }: CoverArtPickerProps) {
       for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
       await commands.embedCoverArt(currentPath, Array.from(bytes), preview.mimeType);
       useMetadataStore.setState({ coverArt: preview });
+      void useLibraryStore.getState().refreshFiles();
       toast.success(t("cover_art.embed_success"));
       onOpenChange(false);
     } catch {

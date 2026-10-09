@@ -123,6 +123,11 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         "TEXT NOT NULL DEFAULT 'music'",
     )?;
 
+    // Comma-separated issue codes from the last analysis. NULL means the file
+    // has not been analysed (or is not audio); an empty string means it was
+    // analysed and is clean.
+    add_column_if_missing(conn, "media_files", "metadata_issues", "TEXT")?;
+
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_media_files_first_seen ON media_files(first_seen_at);",
     )?;

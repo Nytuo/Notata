@@ -123,6 +123,9 @@ pub struct MediaFile {
     /// First seen during the most recent scan.
     #[serde(default)]
     pub is_new: bool,
+    /// Metadata problems found when the file was last analysed
+    #[serde(default)]
+    pub issues: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

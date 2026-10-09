@@ -6,7 +6,7 @@ use walkdir::WalkDir;
 
 use crate::db::queries;
 use crate::error::Result;
-use crate::metadata::reader::read_audio_properties;
+use crate::metadata::reader::analyze_audio_file;
 use crate::models::media_file::{DirectoryNode, MediaFile, MediaType, ScanProgress, ScanResult};
 use crate::scanner::mime::classify_extension;
 use crate::state::AppState;
@@ -22,7 +22,10 @@ pub fn scan_directory(
     let mut audio_files = 0usize;
     let mut skipped = 0usize;
 
-    let conn = state.db.lock().map_err(|e| crate::error::NotataError::Custom(e.to_string()))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|e| crate::error::NotataError::Custom(e.to_string()))?;
 
     // Rotate scan history before indexing: files first seen after
     // `previous_scan` are what the UI reports as new.
@@ -99,15 +102,12 @@ pub fn scan_directory(
 
         let path_str = path.to_string_lossy().to_string();
 
-        // Reading properties opens and parses the container header (not a
-        // full decode), so this is cheap enough to do for every audio file
-        // during a scan. A read failure just leaves these unset rather than
-        // aborting the file's indexing.
-        let audio_properties = if matches!(media_type, MediaType::Audio) {
-            read_audio_properties(&path_str).ok()
+        let analysis = if matches!(media_type, MediaType::Audio) {
+            Some(analyze_audio_file(&path_str))
         } else {
             None
         };
+        let audio_properties = analysis.as_ref().and_then(|a| a.properties.clone());
 
         let media_file = MediaFile {
             id: uuid::Uuid::new_v4().to_string(),
@@ -119,7 +119,7 @@ pub fn scan_directory(
             file_size,
             modified_at,
             scanned_at: scan_started_at,
-            has_cover_art: false,
+            has_cover_art: analysis.as_ref().is_some_and(|a| a.has_cover_art),
             duration_ms: audio_properties.as_ref().map(|p| p.duration_ms),
             bitrate_kbps: audio_properties.as_ref().map(|p| p.bitrate_kbps),
             sample_rate_hz: audio_properties.as_ref().map(|p| p.sample_rate_hz),
@@ -129,6 +129,7 @@ pub fn scan_directory(
             first_seen_at: scan_started_at,
             last_modified_by_app: None,
             is_new: false,
+            issues: analysis.map(|a| a.issues),
         };
 
         queries::upsert_media_file(&conn, &media_file, root_id)?;

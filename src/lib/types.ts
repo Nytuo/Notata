@@ -41,6 +41,7 @@ export interface MediaFile {
   firstSeenAt: number;
   lastModifiedByApp: number | null;
   isNew: boolean;
+  issues: string[] | null;
 }
 
 export interface DirectoryNode {
@@ -347,7 +348,7 @@ export interface ApiKeyStatus {
 }
 
 
-export type PresetKind = "music" | "movie" | "series";
+export type PresetKind = "music" | "movie" | "series" | "book";
 
 export interface RenamePreset {
   id: string;
@@ -364,6 +365,7 @@ export interface RenamePlanEntry {
   relativeTarget: string;
   changed: boolean;
   conflict: string | null;
+  depthFix?: string | null;
 }
 
 export interface RenamePlan {
@@ -371,6 +373,12 @@ export interface RenamePlan {
   total: number;
   changed: number;
   conflicts: number;
+  depthFixes: number;
+}
+
+export interface ApplyRenameResult {
+  outcomes: RenameOutcome[];
+  prunedDirs: number;
 }
 
 export interface RenameOutcome {

@@ -8,9 +8,19 @@ import {
   Search,
   LayoutList,
   AudioWaveform,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -22,6 +32,12 @@ import { useSessionStore } from "@/stores/sessionStore";
 import { BatchEditDialog } from "@/components/batch/BatchEditDialog";
 import { RenameDialog } from "@/components/renamer/RenameDialog";
 import { TranscodeDialog } from "@/components/transcode/TranscodeDialog";
+import {
+  ISSUE_FILTERS,
+  matchesIssueFilter,
+  unanalysedAudioCount,
+  type IssueFilter,
+} from "@/lib/fileIssues";
 import type { MediaFile } from "@/lib/types";
 
 const FILTERS: {
@@ -51,6 +67,8 @@ export function FileListToolbar({ visibleFiles }: { visibleFiles: MediaFile[] })
   const files = useLibraryStore((s) => s.files);
   const selectedFileIds = useLibraryStore((s) => s.selectedFileIds);
   const statusFilter = useLibraryStore((s) => s.statusFilter);
+  const issueFilter = useLibraryStore((s) => s.issueFilter);
+  const setIssueFilter = useLibraryStore((s) => s.setIssueFilter);
   const searchFilter = useLibraryStore((s) => s.searchFilter);
   const setStatusFilter = useLibraryStore((s) => s.setStatusFilter);
   const setSearchFilter = useLibraryStore((s) => s.setSearchFilter);
@@ -73,6 +91,18 @@ export function FileListToolbar({ visibleFiles }: { visibleFiles: MediaFile[] })
     // keeps the memo in step as files are edited.
     [files, statusOf, modifiedPaths],
   );
+
+  const issueCounts = useMemo(() => {
+    const result = {} as Record<Exclude<IssueFilter, "off">, number>;
+    for (const f of ISSUE_FILTERS) {
+      result[f.value] = files.filter((file) =>
+        matchesIssueFilter(file, f.value),
+      ).length;
+    }
+    return result;
+  }, [files]);
+  const unanalysed = useMemo(() => unanalysedAudioCount(files), [files]);
+  const issueActive = issueFilter !== "off";
 
   const { selectedPaths, selectedAudioPaths } = useMemo(() => {
     const selectedIdSet = new Set(selectedFileIds);
@@ -130,6 +160,72 @@ export function FileListToolbar({ visibleFiles }: { visibleFiles: MediaFile[] })
               );
             })}
           </div>
+
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant={issueActive ? "secondary" : "ghost"}
+                    className="h-7 shrink-0 gap-1 px-2 text-xs"
+                    aria-label="Filter files by metadata problems"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    <span className="hidden @md:inline">
+                      {ISSUE_FILTERS.find((f) => f.value === issueFilter)
+                        ?.label ?? "Problems"}
+                    </span>
+                    {issueActive && (
+                      <span className="tabular-nums opacity-60">
+                        {issueCounts[issueFilter]}
+                      </span>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>
+                Find files with missing cover or tags that break matching or
+                playback
+              </TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="start" className="w-64">
+              <DropdownMenuLabel>Show files with</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={issueFilter}
+                onValueChange={(v) => setIssueFilter(v as IssueFilter)}
+              >
+                <DropdownMenuRadioItem value="off">
+                  No problem filter
+                </DropdownMenuRadioItem>
+                <DropdownMenuSeparator />
+                {ISSUE_FILTERS.map((f) => (
+                  <DropdownMenuRadioItem key={f.value} value={f.value}>
+                    <div className="flex w-full flex-col">
+                      <span className="flex items-center justify-between gap-2">
+                        {f.label}
+                        <span className="tabular-nums text-muted-foreground">
+                          {issueCounts[f.value]}
+                        </span>
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {f.hint}
+                      </span>
+                    </div>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+              {unanalysed > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <p className="px-2 py-1.5 text-[10px] text-muted-foreground">
+                    {unanalysed} file{unanalysed === 1 ? "" : "s"} not analysed
+                    yet — rescan the library to include them.
+                  </p>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />

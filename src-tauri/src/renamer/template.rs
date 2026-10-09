@@ -5,7 +5,10 @@ use std::collections::HashMap;
 pub enum Token {
     Literal(String),
     /// `{name}` or `{name:03}` — the spec zero-pads numeric values.
-    Field { name: String, pad: Option<usize> },
+    Field {
+        name: String,
+        pad: Option<usize>,
+    },
     /// `[...]` — dropped entirely if any field inside resolves to empty.
     Optional(Vec<Token>),
 }
@@ -118,6 +121,15 @@ fn parse_field(inner: &str) -> Result<Token, String> {
             pad: None,
         }),
     }
+}
+
+/// True when the template builds folders of its own (a `/` in any literal).
+pub fn has_folders(tokens: &[Token]) -> bool {
+    tokens.iter().any(|t| match t {
+        Token::Literal(text) => text.contains('/'),
+        Token::Field { .. } => false,
+        Token::Optional(inner) => has_folders(inner),
+    })
 }
 
 /// Characters that are illegal in a path component on at least one supported
@@ -233,10 +245,7 @@ fn render_tokens(
 ///
 /// Path components are sanitized individually and empty components are
 /// dropped, so an optional group that collapses cannot leave `//` behind.
-pub fn render_detailed(
-    tokens: &[Token],
-    values: &HashMap<String, String>,
-) -> RenderOutcome {
+pub fn render_detailed(tokens: &[Token], values: &HashMap<String, String>) -> RenderOutcome {
     let mut raw = String::new();
     let mut state = RenderState {
         seen: 0,
@@ -263,10 +272,7 @@ pub fn render(tokens: &[Token], values: &HashMap<String, String>) -> String {
 }
 
 /// Convenience: parse and render in one step.
-pub fn render_template(
-    template: &str,
-    values: &HashMap<String, String>,
-) -> Result<String, String> {
+pub fn render_template(template: &str, values: &HashMap<String, String>) -> Result<String, String> {
     let tokens = parse(template)?;
     Ok(render(&tokens, values))
 }

@@ -15,6 +15,35 @@ pub(crate) fn stamp_modified(state: &AppState, path: &str) {
             log::warn!("Failed to mark {} as modified: {}", path, e);
         }
     }
+    refresh_analysis(state, path);
+}
+
+/// Re-check an audio file's metadata gaps after it was written, so the
+/// "needs attention" filter updates without a rescan. Non-audio paths are
+/// left alone, and failures are logged rather than surfaced — the write
+/// itself already succeeded.
+pub(crate) fn refresh_analysis(state: &AppState, path: &str) {
+    let is_audio = std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|ext| {
+            matches!(
+                crate::scanner::mime::classify_extension(ext).0,
+                crate::models::media_file::MediaType::Audio
+            )
+        });
+    if !is_audio {
+        return;
+    }
+
+    let analysis = reader::analyze_audio_file(path);
+    if let Ok(conn) = state.db.lock() {
+        if let Err(e) =
+            queries::update_audio_analysis(&conn, path, analysis.has_cover_art, &analysis.issues)
+        {
+            log::warn!("Failed to refresh analysis for {}: {}", path, e);
+        }
+    }
 }
 
 #[tauri::command]

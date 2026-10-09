@@ -1,7 +1,7 @@
 import { useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
-import { Music, Pencil, Sparkles } from "lucide-react";
+import { AlertTriangle, Music, Pencil, Sparkles } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -22,6 +22,7 @@ import { useVideoMetadataStore } from "@/stores/videoMetadataStore";
 import { useBookMetadataStore } from "@/stores/bookMetadataStore";
 import { useSessionStore } from "@/stores/sessionStore";
 import { FileListToolbar } from "@/components/library/FileListToolbar";
+import { ISSUE_LABELS, matchesIssueFilter } from "@/lib/fileIssues";
 import type { MediaFile } from "@/lib/types";
 
 function formatDuration(ms: number | null): string {
@@ -44,6 +45,28 @@ function formatAudioFormat(format: MediaFile["audioFormat"]): string {
   if (!format) return "";
   if (typeof format === "string") return format.toUpperCase();
   return Object.values(format)[0]?.toUpperCase() ?? "";
+}
+
+function IssueBadge({ file }: { file: MediaFile }) {
+  if (!file.issues || file.issues.length === 0) return null;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <AlertTriangle
+          className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+          aria-label={`${file.issues.length} metadata problems`}
+        />
+      </TooltipTrigger>
+      <TooltipContent>
+        <ul>
+          {file.issues.map((code) => (
+            <li key={code}>{ISSUE_LABELS[code] ?? code}</li>
+          ))}
+        </ul>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function StatusBadge({ file }: { file: MediaFile }) {
@@ -100,6 +123,7 @@ export function FileList() {
   const selectedFileIds = useLibraryStore((s) => s.selectedFileIds);
   const selectFiles = useLibraryStore((s) => s.selectFiles);
   const statusFilter = useLibraryStore((s) => s.statusFilter);
+  const issueFilter = useLibraryStore((s) => s.issueFilter);
   const searchFilter = useLibraryStore((s) => s.searchFilter);
   const { loadMetadata, currentPath } = useMetadataStore();
   const loadVideoMetadata = useVideoMetadataStore((s) => s.loadMetadata);
@@ -118,6 +142,9 @@ export function FileList() {
       if (statusFilter !== "all" && statusOf(file) !== statusFilter) {
         return false;
       }
+      if (!matchesIssueFilter(file, issueFilter)) {
+        return false;
+      }
       if (query && !file.fileName.toLowerCase().includes(query)) {
         return false;
       }
@@ -125,7 +152,7 @@ export function FileList() {
     });
     // `modifiedPaths` is read indirectly through `statusOf`; listing it here
     // keeps the memo in step as files are edited.
-  }, [files, statusFilter, searchFilter, statusOf, modifiedPaths]);
+  }, [files, statusFilter, issueFilter, searchFilter, statusOf, modifiedPaths]);
 
   // A Set for O(1) row-highlight lookups — `selectedFileIds` stays an
   // array (order matters for shift-click range anchoring), but checking
@@ -217,7 +244,7 @@ export function FileList() {
                 <TableHead className="hidden w-[70px] text-right @md:table-cell">
                   {t("columns.size")}
                 </TableHead>
-                <TableHead className="w-[72px] text-right">Status</TableHead>
+                <TableHead className="w-[96px] text-right">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -262,7 +289,10 @@ export function FileList() {
                       {formatSize(file.fileSize)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <StatusBadge file={file} />
+                      <div className="flex items-center justify-end gap-1.5">
+                        <IssueBadge file={file} />
+                        <StatusBadge file={file} />
+                      </div>
                     </TableCell>
                   </TableRow>
                 );

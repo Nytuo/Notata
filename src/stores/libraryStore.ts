@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { commands } from "@/lib/tauri";
+import type { IssueFilter } from "@/lib/fileIssues";
 import type {
   LibraryRoot,
   MediaFile,
@@ -19,6 +20,7 @@ interface LibraryState {
   scanProgress: ScanProgress | null;
   isScanning: boolean;
   statusFilter: StatusFilter;
+  issueFilter: IssueFilter;
   searchFilter: string;
 
   loadRoots: () => Promise<void>;
@@ -33,6 +35,7 @@ interface LibraryState {
   selectAll: (ids: string[]) => void;
   clearSelection: () => void;
   setStatusFilter: (filter: StatusFilter) => void;
+  setIssueFilter: (filter: IssueFilter) => void;
   setSearchFilter: (query: string) => void;
   setScanProgress: (progress: ScanProgress | null) => void;
   setIsScanning: (scanning: boolean) => void;
@@ -47,6 +50,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   scanProgress: null,
   isScanning: false,
   statusFilter: "all",
+  issueFilter: "off",
   searchFilter: "",
 
   loadRoots: async () => {
@@ -113,6 +117,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   clearSelection: () => set({ selectedFileIds: [] }),
 
   setStatusFilter: (filter) => set({ statusFilter: filter }),
+  setIssueFilter: (filter) => set({ issueFilter: filter }),
   setSearchFilter: (query) => set({ searchFilter: query }),
 
   setScanProgress: (progress) => set({ scanProgress: progress }),

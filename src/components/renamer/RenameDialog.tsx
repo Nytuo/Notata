@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import {
   Select,
@@ -58,6 +59,7 @@ export function RenameDialog({ open, onOpenChange, paths }: RenameDialogProps) {
     "{albumartist}/{album}[ ({year})]/{track:02} - {title}",
   );
   const [baseDir, setBaseDir] = useState<string>("");
+  const [repairTree, setRepairTree] = useState(true);
   const [plan, setPlan] = useState<RenamePlan | null>(null);
   const [templateError, setTemplateError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -82,7 +84,12 @@ export function RenameDialog({ open, onOpenChange, paths }: RenameDialogProps) {
     try {
       await commands.validateRenameTemplate(template);
       setPlan(
-        await commands.previewRename(paths, template, baseDir || undefined),
+        await commands.previewRename(
+          paths,
+          template,
+          baseDir || undefined,
+          repairTree,
+        ),
       );
     } catch (e) {
       setTemplateError(String(e));
@@ -90,7 +97,7 @@ export function RenameDialog({ open, onOpenChange, paths }: RenameDialogProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [paths, template, baseDir]);
+  }, [paths, template, baseDir, repairTree]);
 
   const handlePickBaseDir = async () => {
     const selected = await openDialog({ directory: true, multiple: false });
@@ -101,14 +108,23 @@ export function RenameDialog({ open, onOpenChange, paths }: RenameDialogProps) {
     if (!plan) return;
     setIsApplying(true);
     try {
-      const outcomes = await commands.applyRename(plan.entries);
+      const { outcomes, prunedDirs } = await commands.applyRename(
+        plan.entries,
+        repairTree,
+        baseDir || undefined,
+      );
       const succeeded = outcomes.filter((o) => o.success);
       const failed = outcomes.filter((o) => !o.success);
 
       await refreshFiles();
 
       if (failed.length === 0) {
-        toast.success(`Renamed ${succeeded.length} files`);
+        toast.success(
+          `Renamed ${succeeded.length} files` +
+            (prunedDirs > 0
+              ? `, removed ${prunedDirs} empty folder${prunedDirs === 1 ? "" : "s"}`
+              : ""),
+        );
       } else {
         toast.warning(
           `Renamed ${succeeded.length}, failed ${failed.length}: ${failed[0].error}`,
@@ -162,7 +178,11 @@ export function RenameDialog({ open, onOpenChange, paths }: RenameDialogProps) {
 
             <Input
               className="h-8 flex-1 text-xs"
-              placeholder="Destination folder (defaults to each file's own folder)"
+              placeholder={
+                repairTree
+                  ? "Destination folder (defaults to the library folder)"
+                  : "Destination folder (defaults to each file's own folder)"
+              }
               value={baseDir}
               onChange={(e) => setBaseDir(e.target.value)}
             />
@@ -195,6 +215,26 @@ export function RenameDialog({ open, onOpenChange, paths }: RenameDialogProps) {
               Preview
             </Button>
           </div>
+
+          <label className="flex cursor-pointer items-start gap-2 text-xs">
+            <Checkbox
+              className="mt-0.5"
+              checked={repairTree}
+              onCheckedChange={(v) => {
+                setRepairTree(v === true);
+                setPlan(null);
+              }}
+            />
+            <span>
+              <span className="font-medium">Repair folder depth</span>
+              <span className="ml-1 text-muted-foreground">
+                Builds the preset's folders from the library root, so a file
+                filed as Artist/Album/Artist/Album/track lands at
+                Artist/Album/track, and folders left empty are removed.
+                Filename-only presets still rename in place.
+              </span>
+            </span>
+          </label>
 
           {templateError && (
             <p className="flex items-center gap-1 text-xs text-destructive">
@@ -259,6 +299,12 @@ export function RenameDialog({ open, onOpenChange, paths }: RenameDialogProps) {
                       {entry.conflict}
                     </p>
                   )}
+                  {entry.depthFix && !entry.conflict && (
+                    <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400">
+                      <AlertTriangle className="h-3 w-3 shrink-0" />
+                      {entry.depthFix}
+                    </p>
+                  )}
                   {!entry.changed && !entry.conflict && (
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       Already named correctly
@@ -276,6 +322,11 @@ export function RenameDialog({ open, onOpenChange, paths }: RenameDialogProps) {
             {plan && (
               <>
                 <span>{plan.changed} to rename</span>
+                {plan.depthFixes > 0 && (
+                  <span className="text-amber-600 dark:text-amber-400">
+                    {plan.depthFixes} at the wrong depth
+                  </span>
+                )}
                 {plan.conflicts > 0 && (
                   <span className="text-destructive">
                     {plan.conflicts} conflicts (skipped)

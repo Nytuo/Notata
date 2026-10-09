@@ -20,6 +20,9 @@ pub struct RenamePlanEntry {
     pub changed: bool,
     /// Set when this entry cannot be applied safely.
     pub conflict: Option<String>,
+    /// Set in repair mode when the file sits at a different folder depth
+    #[serde(default)]
+    pub depth_fix: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +32,8 @@ pub struct RenamePlan {
     pub total: usize,
     pub changed: usize,
     pub conflicts: usize,
+    #[serde(default)]
+    pub depth_fixes: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +43,22 @@ pub struct RenameOutcome {
     pub target_path: String,
     pub success: bool,
     pub error: Option<String>,
+}
+
+/// The library folder that contains `path`, preferring the deepest match so
+/// nested library roots anchor to the most specific one.
+fn root_for<'a>(path: &Path, roots: &'a [String]) -> Option<&'a str> {
+    roots
+        .iter()
+        .filter(|r| path.starts_with(r.as_str()))
+        .max_by_key(|r| Path::new(r.as_str()).components().count())
+        .map(|r| r.as_str())
+}
+
+/// Number of folders between `base` and the file, if the file is under it.
+fn folder_depth(base: &Path, file: &Path) -> Option<usize> {
+    let rel = file.strip_prefix(base).ok()?;
+    Some(rel.components().count().saturating_sub(1))
 }
 
 /// Compute the new path for one file without touching disk.
@@ -68,7 +89,10 @@ fn plan_entry(
     // where only the template's literal punctuation survived because no
     // field resolved — that is what produced names like "() ()".
     let conflict = if rendered.is_empty() {
-        Some("Template produced an empty name — this file has no metadata to rename from".to_string())
+        Some(
+            "Template produced an empty name — this file has no metadata to rename from"
+                .to_string(),
+        )
     } else if outcome.is_unresolved() {
         Some(format!(
             "No metadata found for this file — the template resolved to \"{}\"",
@@ -84,7 +108,26 @@ fn plan_entry(
         target_path,
         relative_target,
         conflict,
+        depth_fix: None,
     }
+}
+
+/// Note when a file is filed at the wrong depth under `base`, so the preview
+/// can say *why* it moves rather than just where.
+fn describe_depth_fix(base: &Path, entry: &RenamePlanEntry) -> Option<String> {
+    if !entry.changed || entry.conflict.is_some() {
+        return None;
+    }
+    let from = folder_depth(base, Path::new(&entry.source_path))?;
+    let to = folder_depth(base, Path::new(&entry.target_path))?;
+    (from != to).then(|| {
+        format!(
+            "Wrong depth: {} folder level{} deep, the preset expects {}",
+            from,
+            if from == 1 { "" } else { "s" },
+            to
+        )
+    })
 }
 
 /// Build a full rename plan, flagging collisions before anything is moved.
@@ -96,27 +139,64 @@ pub fn build_plan(
     files: &[(String, HashMap<String, String>)],
     base_dir: Option<&str>,
 ) -> Result<RenamePlan> {
+    build_plan_with(template_str, files, base_dir, None)
+}
+
+/// Like [`build_plan`], with an optional set of library roots to repair the
+/// folder tree against.
+pub fn build_plan_with(
+    template_str: &str,
+    files: &[(String, HashMap<String, String>)],
+    base_dir: Option<&str>,
+    repair_roots: Option<&[String]>,
+) -> Result<RenamePlan> {
     let tokens = template::parse(template_str).map_err(NotataError::Custom)?;
+    let repair = repair_roots.filter(|_| template::has_folders(&tokens));
 
     let mut entries = Vec::new();
     for (path, field_values) in files {
         let source = Path::new(path);
-        let base = match base_dir {
-            Some(b) => PathBuf::from(b),
-            None => source.parent().map(PathBuf::from).unwrap_or_default(),
+        let own_folder = || source.parent().map(PathBuf::from).unwrap_or_default();
+
+        let mut outside_library = false;
+        let base = match (base_dir, repair) {
+            (Some(b), _) => PathBuf::from(b),
+            (None, Some(roots)) => match root_for(source, roots) {
+                Some(root) => PathBuf::from(root),
+                None => {
+                    outside_library = true;
+                    own_folder()
+                }
+            },
+            (None, None) => own_folder(),
         };
-        entries.push(plan_entry(&tokens, path, field_values, &base));
+
+        let mut entry = plan_entry(&tokens, path, field_values, &base);
+        if outside_library && entry.conflict.is_none() {
+            entry.conflict = Some(
+                "File is outside every library folder, so its tree cannot be repaired".to_string(),
+            );
+        }
+        if repair.is_some() {
+            entry.depth_fix = describe_depth_fix(&base, &entry);
+        }
+        entries.push(entry);
     }
 
     flag_conflicts(&mut entries);
 
     let changed = entries.iter().filter(|e| e.changed).count();
     let conflicts = entries.iter().filter(|e| e.conflict.is_some()).count();
+    let depth_fixes = entries
+        .iter()
+        .filter(|e| e.depth_fix.is_some() && e.conflict.is_none())
+        .count();
 
     Ok(RenamePlan {
         total: entries.len(),
         changed,
         conflicts,
+        depth_fixes,
         entries,
     })
 }
@@ -127,13 +207,14 @@ pub fn build_plan_for_paths(
     template_str: &str,
     paths: &[String],
     base_dir: Option<&str>,
+    repair_roots: Option<&[String]>,
 ) -> Result<RenamePlan> {
     let files: Vec<(String, HashMap<String, String>)> = paths
         .iter()
         .map(|p| (p.clone(), fields::fields_for_path(p)))
         .collect();
 
-    build_plan(template_str, &files, base_dir)
+    build_plan_with(template_str, &files, base_dir, repair_roots)
 }
 
 /// Mark entries whose targets collide with each other or with unrelated files
@@ -217,6 +298,63 @@ pub fn apply_plan(entries: &[RenamePlanEntry]) -> Vec<RenameOutcome> {
     }
 
     outcomes
+}
+
+/// Files that do not count as content when deciding a folder is empty.
+fn is_junk(name: &str) -> bool {
+    matches!(name, ".DS_Store" | "Thumbs.db" | "desktop.ini") || name.starts_with("._")
+}
+
+/// Remove the folders a rename emptied, walking upward from each moved file's
+/// old location.
+///
+/// Never removes a `stop_at` folder itself or anything outside them, and a
+/// folder that still holds real files (a cover image, an NFO) is left alone.
+/// Returns how many folders were removed.
+pub fn prune_empty_dirs(outcomes: &[RenameOutcome], stop_at: &[String]) -> usize {
+    let mut removed = 0;
+
+    for outcome in outcomes.iter().filter(|o| o.success) {
+        let mut dir = match Path::new(&outcome.source_path).parent() {
+            Some(d) => d.to_path_buf(),
+            None => continue,
+        };
+
+        loop {
+            let inside = stop_at
+                .iter()
+                .any(|s| dir.starts_with(s.as_str()) && dir != Path::new(s.as_str()));
+            if !inside {
+                break;
+            }
+
+            let entries = match std::fs::read_dir(&dir) {
+                Ok(e) => e.filter_map(|e| e.ok()).collect::<Vec<_>>(),
+                Err(_) => break,
+            };
+            let only_junk = entries
+                .iter()
+                .all(|e| e.file_name().to_str().is_some_and(is_junk));
+            if !only_junk {
+                break;
+            }
+
+            for e in &entries {
+                let _ = std::fs::remove_file(e.path());
+            }
+            if std::fs::remove_dir(&dir).is_err() {
+                break;
+            }
+            removed += 1;
+
+            match dir.parent() {
+                Some(p) => dir = p.to_path_buf(),
+                None => break,
+            }
+        }
+    }
+
+    removed
 }
 
 #[cfg(test)]
@@ -315,7 +453,11 @@ mod tests {
     fn jellyfin_book_preset_follows_author_book_layout() {
         let files = vec![(
             "/in/dune.epub".to_string(),
-            fields(&[("title", "Dune"), ("author", "Frank Herbert"), ("year", "1965")]),
+            fields(&[
+                ("title", "Dune"),
+                ("author", "Frank Herbert"),
+                ("year", "1965"),
+            ]),
         )];
         let plan = build_plan(&preset_template("jellyfin-book"), &files, Some("/lib")).unwrap();
 
@@ -342,10 +484,7 @@ mod tests {
     #[test]
     fn optional_groups_keep_partial_metadata_usable() {
         // A known title but no year should still rename cleanly.
-        let files = vec![(
-            "/movies/x.mkv".to_string(),
-            fields(&[("title", "Solaris")]),
-        )];
+        let files = vec![("/movies/x.mkv".to_string(), fields(&[("title", "Solaris")]))];
         let plan = build_plan("{title}[ ({year})]", &files, Some("/library")).unwrap();
 
         assert_eq!(plan.entries[0].relative_target, "Solaris.mkv");
@@ -389,5 +528,173 @@ mod tests {
     fn rejects_invalid_templates() {
         let files = vec![("/music/a.flac".to_string(), HashMap::new())];
         assert!(build_plan("{unclosed", &files, None).is_err());
+    }
+
+    #[test]
+    fn repair_mode_collapses_a_doubled_artist_album_tree() {
+        let files = vec![(
+            "/lib/Sebadoh/Bakesale/Sebadoh/Bakesale/03 - Bakesale.flac".to_string(),
+            track("Bakesale", "Sebadoh", "Bakesale", 3),
+        )];
+        let roots = vec!["/lib".to_string()];
+        let plan = build_plan_with(
+            "{albumartist}/{album}/{track:02} - {title}",
+            &files,
+            None,
+            Some(&roots),
+        )
+        .unwrap();
+
+        assert_eq!(
+            plan.entries[0].target_path,
+            "/lib/Sebadoh/Bakesale/03 - Bakesale.flac"
+        );
+        assert!(plan.entries[0]
+            .depth_fix
+            .as_ref()
+            .unwrap()
+            .contains("4 folder levels"));
+        assert_eq!(plan.depth_fixes, 1);
+    }
+
+    #[test]
+    fn without_repair_the_same_file_gets_nested_deeper() {
+        // The bug repair mode exists for.
+        let files = vec![(
+            "/lib/Sebadoh/Bakesale/03 - Bakesale.flac".to_string(),
+            track("Bakesale", "Sebadoh", "Bakesale", 3),
+        )];
+        let plan = build_plan("{albumartist}/{album}/{track:02} - {title}", &files, None).unwrap();
+
+        assert_eq!(
+            plan.entries[0].target_path,
+            "/lib/Sebadoh/Bakesale/Sebadoh/Bakesale/03 - Bakesale.flac"
+        );
+    }
+
+    #[test]
+    fn repair_mode_leaves_a_healthy_file_unchanged() {
+        let files = vec![(
+            "/lib/Sebadoh/Bakesale/03 - Bakesale.flac".to_string(),
+            track("Bakesale", "Sebadoh", "Bakesale", 3),
+        )];
+        let roots = vec!["/lib".to_string()];
+        let plan = build_plan_with(
+            "{albumartist}/{album}/{track:02} - {title}",
+            &files,
+            None,
+            Some(&roots),
+        )
+        .unwrap();
+
+        assert!(!plan.entries[0].changed);
+        assert_eq!(plan.depth_fixes, 0);
+    }
+
+    #[test]
+    fn repair_mode_lifts_a_too_shallow_file_into_the_tree() {
+        let files = vec![(
+            "/lib/03 - Bakesale.flac".to_string(),
+            track("Bakesale", "Sebadoh", "Bakesale", 3),
+        )];
+        let roots = vec!["/lib".to_string()];
+        let plan = build_plan_with(
+            "{albumartist}/{album}/{track:02} - {title}",
+            &files,
+            None,
+            Some(&roots),
+        )
+        .unwrap();
+
+        assert_eq!(
+            plan.entries[0].target_path,
+            "/lib/Sebadoh/Bakesale/03 - Bakesale.flac"
+        );
+        assert!(plan.entries[0]
+            .depth_fix
+            .as_ref()
+            .unwrap()
+            .contains("0 folder levels"));
+    }
+
+    #[test]
+    fn repair_mode_uses_the_deepest_matching_root() {
+        let files = vec![(
+            "/lib/rock/X/Y/X/Y/01 - Song.flac".to_string(),
+            track("Song", "X", "Y", 1),
+        )];
+        let roots = vec!["/lib".to_string(), "/lib/rock".to_string()];
+        let plan = build_plan_with(
+            "{albumartist}/{album}/{track:02} - {title}",
+            &files,
+            None,
+            Some(&roots),
+        )
+        .unwrap();
+
+        assert_eq!(plan.entries[0].target_path, "/lib/rock/X/Y/01 - Song.flac");
+    }
+
+    #[test]
+    fn repair_mode_flags_files_outside_every_library() {
+        let files = vec![("/elsewhere/a.flac".to_string(), track("Song", "X", "Y", 1))];
+        let roots = vec!["/lib".to_string()];
+        let plan = build_plan_with("{artist}/{title}", &files, None, Some(&roots)).unwrap();
+
+        assert!(plan.entries[0]
+            .conflict
+            .as_ref()
+            .unwrap()
+            .contains("outside"));
+    }
+
+    #[test]
+    fn filename_only_templates_still_rename_in_place() {
+        // Nothing to anchor: moving these to the library root would be a
+        // surprise, so repair mode must not apply.
+        let files = vec![(
+            "/lib/Sebadoh/Bakesale/a.flac".to_string(),
+            track("Bakesale", "Sebadoh", "Bakesale", 3),
+        )];
+        let roots = vec!["/lib".to_string()];
+        let plan = build_plan_with("{track:02} - {title}", &files, None, Some(&roots)).unwrap();
+
+        assert_eq!(
+            plan.entries[0].target_path,
+            "/lib/Sebadoh/Bakesale/03 - Bakesale.flac"
+        );
+        assert!(plan.entries[0].depth_fix.is_none());
+    }
+
+    #[test]
+    fn prunes_emptied_folders_up_to_the_library_root_only() {
+        let base = std::env::temp_dir().join("notata-prune-test");
+        let _ = std::fs::remove_dir_all(&base);
+        let deep = base.join("A/B/A/B");
+        std::fs::create_dir_all(&deep).unwrap();
+        std::fs::write(base.join("A/B/A/.DS_Store"), b"").unwrap();
+        // A sibling holding real content must survive.
+        std::fs::create_dir_all(base.join("A/keep")).unwrap();
+        std::fs::write(base.join("A/keep/cover.jpg"), b"x").unwrap();
+
+        // The rename already moved the file to its corrected home.
+        std::fs::write(base.join("A/B/t.flac"), b"x").unwrap();
+
+        let outcomes = vec![RenameOutcome {
+            source_path: deep.join("t.flac").to_string_lossy().to_string(),
+            target_path: base.join("A/B/t.flac").to_string_lossy().to_string(),
+            success: true,
+            error: None,
+        }];
+        let removed = prune_empty_dirs(&outcomes, &[base.to_string_lossy().to_string()]);
+
+        assert_eq!(removed, 2, "A/B/A/B and A/B/A (junk-only) go");
+        assert!(
+            base.join("A/B").exists(),
+            "A/B may still hold the moved file"
+        );
+        assert!(base.join("A/keep/cover.jpg").exists());
+        assert!(base.exists(), "the library root itself is never removed");
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

@@ -104,8 +104,8 @@ pub fn delete_library_root(conn: &Connection, id: &str) -> Result<()> {
 /// metadata stays attached and the "new since last scan" flag remains accurate.
 pub fn upsert_media_file(conn: &Connection, file: &MediaFile, library_root_id: &str) -> Result<()> {
     conn.execute(
-        "INSERT INTO media_files (id, library_root_id, path, file_name, parent_dir, media_type, audio_format, file_size, modified_at, scanned_at, has_cover_art, duration_ms, bitrate_kbps, sample_rate_hz, channels, first_seen_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+        "INSERT INTO media_files (id, library_root_id, path, file_name, parent_dir, media_type, audio_format, file_size, modified_at, scanned_at, has_cover_art, duration_ms, bitrate_kbps, sample_rate_hz, channels, first_seen_at, metadata_issues)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
          ON CONFLICT(path) DO UPDATE SET
             library_root_id = excluded.library_root_id,
             file_name       = excluded.file_name,
@@ -115,6 +115,8 @@ pub fn upsert_media_file(conn: &Connection, file: &MediaFile, library_root_id: &
             file_size       = excluded.file_size,
             modified_at     = excluded.modified_at,
             scanned_at      = excluded.scanned_at,
+            has_cover_art   = excluded.has_cover_art,
+            metadata_issues = excluded.metadata_issues,
             duration_ms     = excluded.duration_ms,
             bitrate_kbps    = excluded.bitrate_kbps,
             sample_rate_hz  = excluded.sample_rate_hz,
@@ -136,6 +138,7 @@ pub fn upsert_media_file(conn: &Connection, file: &MediaFile, library_root_id: &
             file.sample_rate_hz,
             file.channels,
             file.first_seen_at,
+            file.issues.as_ref().map(|i| i.join(",")),
         ],
     )?;
     Ok(())
@@ -191,10 +194,26 @@ pub fn mark_file_modified(conn: &Connection, path: &str, when: i64) -> Result<()
     Ok(())
 }
 
+/// Store the result of re-analysing one audio file after its tags or cover
+/// changed, so the issue filter reflects the edit without a rescan.
+pub fn update_audio_analysis(
+    conn: &Connection,
+    path: &str,
+    has_cover_art: bool,
+    issues: &[String],
+) -> Result<()> {
+    conn.execute(
+        "UPDATE media_files SET has_cover_art = ?1, metadata_issues = ?2 WHERE path = ?3",
+        params![has_cover_art as i32, issues.join(","), path],
+    )?;
+    Ok(())
+}
+
 const MEDIA_FILE_COLUMNS: &str = "m.id, m.path, m.file_name, m.parent_dir, m.media_type, \
      m.audio_format, m.file_size, m.modified_at, m.scanned_at, m.has_cover_art, m.duration_ms, \
      m.bitrate_kbps, m.sample_rate_hz, m.channels, m.first_seen_at, m.last_modified_by_app, \
-     CASE WHEN r.previous_scan IS NOT NULL AND m.first_seen_at > r.previous_scan THEN 1 ELSE 0 END AS is_new";
+     CASE WHEN r.previous_scan IS NOT NULL AND m.first_seen_at > r.previous_scan THEN 1 ELSE 0 END AS is_new, \
+     m.metadata_issues";
 
 fn map_media_file(row: &rusqlite::Row) -> rusqlite::Result<MediaFile> {
     Ok(MediaFile {
@@ -217,6 +236,12 @@ fn map_media_file(row: &rusqlite::Row) -> rusqlite::Result<MediaFile> {
         first_seen_at: row.get(14)?,
         last_modified_by_app: row.get(15)?,
         is_new: row.get::<_, i32>(16)? != 0,
+        issues: row.get::<_, Option<String>>(17)?.map(|s| {
+            s.split(',')
+                .filter(|c| !c.is_empty())
+                .map(str::to_string)
+                .collect()
+        }),
     })
 }
 

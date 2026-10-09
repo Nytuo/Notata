@@ -150,6 +150,16 @@ resulting paths, and entries that would collide with each other — or that have
 no metadata to rename from — are flagged and skipped rather than producing
 files called `() ().mkv`.
 
+**Repair folder depth** (on by default) builds a preset's folders from the
+library root instead of from each file's own folder. Without it, a file already
+at `Artist/Album/` gets `Artist/Album/` stacked on top of it again; with it,
+`Artist/Album/Artist/Album/track.flac` is moved to `Artist/Album/track.flac`
+and the preview marks each such file as being at the wrong depth. Folders the
+move leaves empty (or holding only `.DS_Store`-style junk) are removed, never
+including the library root, and folders that still hold other files such as a
+cover image are left alone. Presets with no folders (`{track} - {title}`) still
+rename in place.
+
 ### Template syntax
 
 | Syntax | Meaning |

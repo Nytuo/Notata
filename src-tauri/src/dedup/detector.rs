@@ -513,6 +513,7 @@ mod tests {
             first_seen_at: 0,
             last_modified_by_app: None,
             is_new: false,
+            issues: None,
         }
     }
 

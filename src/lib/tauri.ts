@@ -24,7 +24,7 @@ import type {
   ProviderInfo,
   ProviderRelease,
   ProviderSearchResult,
-  RenameOutcome,
+  ApplyRenameResult,
   RenamePlan,
   RenamePlanEntry,
   RemoteArtwork,
@@ -229,15 +229,29 @@ export const commands = {
   validateRenameTemplate: (template: string) =>
     invoke<void>("validate_rename_template", { template }),
 
-  previewRename: (paths: string[], template: string, baseDir?: string) =>
+  previewRename: (
+    paths: string[],
+    template: string,
+    baseDir?: string,
+    repairTree = false,
+  ) =>
     invoke<RenamePlan>("preview_rename", {
       paths,
       template,
       baseDir: baseDir ?? null,
+      repairTree,
     }),
 
-  applyRename: (entries: RenamePlanEntry[]) =>
-    invoke<RenameOutcome[]>("apply_rename", { entries }),
+  applyRename: (
+    entries: RenamePlanEntry[],
+    pruneEmpty = false,
+    baseDir?: string,
+  ) =>
+    invoke<ApplyRenameResult>("apply_rename", {
+      entries,
+      pruneEmpty,
+      baseDir: baseDir ?? null,
+    }),
 
   // -------------------------------------------------------------- dedup ----
 

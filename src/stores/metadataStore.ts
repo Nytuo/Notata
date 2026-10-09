@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { toast } from "sonner";
 import { commands } from "@/lib/tauri";
 import { useSessionStore } from "./sessionStore";
+import { useLibraryStore } from "./libraryStore";
 import type { AudioProperties, CoverArtData, TrackMetadata } from "@/lib/types";
 
 interface MetadataState {
@@ -71,6 +72,7 @@ export const useMetadataStore = create<MetadataState>((set, get) => ({
     try {
       await commands.writeMetadata(currentPath, currentMetadata);
       useSessionStore.getState().markModified(currentPath);
+      void useLibraryStore.getState().refreshFiles();
       set({
         originalMetadata: structuredClone(currentMetadata),
         isDirty: false,
